@@ -28,6 +28,15 @@ Los instaladores y archivos de actualización de la aplicación se distribuyen p
 
 Los Programas Marco y demás contenidos descargables se gestionan también de forma independiente y pueden estar sujetos a sus propias condiciones de uso o licencia.
 
+## Autor y contacto
+
+**Autor y mantenedor:** elftemir
+
+Para consultas, propuestas, incidencias o colaboración:
+
+- GitHub Issues: utiliza la sección de incidencias de este repositorio.
+- Correo electrónico: **elftemir@hotmail.com**
+
 ## Licencia
 
 **Constructor de Programas Municipales** es software libre.
@@ -36,10 +45,8 @@ Copyright © 2026 **elftemir**
 
 Este programa puede redistribuirse y/o modificarse bajo los términos de la **GNU General Public License**, publicada por la Free Software Foundation, **versión 3 de la licencia o, a elección del usuario, cualquier versión posterior**.
 
-SPDX-License-Identifier: GPL-3.0-or-later
+**SPDX-License-Identifier: GPL-3.0-or-later**
 
 Consulta el archivo [LICENSE](LICENSE) para ver el texto completo de la GNU General Public License v3.
 
-## Autor
-
-**elftemir**
+La licencia GPL se aplica al software. Los Programas Marco, documentos políticos, logotipos, marcas y otros contenidos de terceros pueden estar sujetos a sus propias condiciones de uso, derechos de autor o derechos de marca.
