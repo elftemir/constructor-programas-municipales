@@ -17,17 +17,49 @@ instalable/
 *.exe.blockmap
 latest.yml
 
+# Binarios de AI runtime descargables/reproducibles
+resources/ai-runtime/llama.cpp/*.exe
+resources/ai-runtime/llama.cpp/*.dll
+resources/llama-cpu-win-x64.zip
+
 # Modelos de IA
+data/models/
 *.gguf
 *.ggml
 
-# Bases de datos y datos locales
+# Bases de datos y datos locales de desarrollo / usuario
 *.db
 *.db-journal
 *.db-shm
 *.db-wal
 *.sqlite
 *.sqlite3
+data/programa_electoral.sqlite
+
+# Exportaciones generadas y pruebas de usuario
+Exportaciones/
+test_output_*/
+
+# Scratch y scripts temporales de desarrollo
+scratch/
+
+# Staging de código fuente público
+public-source-candidate/
+
+# Carpetas de documentación interna, recursos de referencia o material de trabajo
+00_PROYECTO/
+01_PROGRAMA_MARCO/
+01_PROGRAMA_PRUEBA/
+02_ESTILO_POLITICO/
+03_IDENTIDAD_VISUAL/
+05_IA_LOCAL/
+06_DATOS_MUNICIPIO/
+07_EXPORTACION/
+08_DISENOS_REVISADOS/
+08_DISEÑOS/
+09_LOGOTIPOS/
+content-fixtures/
+*.pdf
 
 # Copias de seguridad
 backups/

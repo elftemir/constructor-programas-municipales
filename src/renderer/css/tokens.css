@@ -1,0 +1,60 @@
+:root {
+  /* Action colors */
+  --action-primary: #693EC9;
+  --action-primary-hover: #562EB0;
+  --action-link: #5A32B5;
+  --action-destructive: #9C3A17;
+  --action-destructive-hover: #832C0D;
+
+  /* Brand colors */
+  --brand-purple: #9169F4;
+  --brand-night: #573C81;
+
+  /* Surfaces */
+  --surface-app: #F6F5F3;
+  --surface-panel: #FFFFFF;
+  --surface-muted: #F0EEEA;
+  --surface-hover: #EBE8E3;
+  --surface-active: #EEE8FA;
+
+  /* Texts */
+  --text-primary: #1F1530;
+  --text-secondary: #5B5468;
+  --text-muted: #7E7688;
+  --text-inverse: #FFFFFF;
+
+  /* Borders */
+  --border-field: #8F877C;
+  --border-subtle: #D8D3CC;
+  --border-divider: #E5E1DB;
+  --border-focus: #693EC9;
+
+  /* State chips */
+  --included-text: #0B5E4A;
+  --included-bg: #DDF6EE;
+  --doubt-text: #7A4F00;
+  --doubt-bg: #FFF0CC;
+  --discarded-text: #9C3A17;
+  --discarded-bg: #FBE3DC;
+  --adapted-text: #573C81;
+  --adapted-bg: #EEE8FA;
+  --unreviewed-text: #5B5468;
+  --unreviewed-bg: #F0EEEA;
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-default: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 9999px;
+
+  /* Typography scale */
+  --font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 12.5px;
+  --font-size-base: 14px;
+  --font-size-md: 15px;
+  --font-size-lg: 18px;
+  --font-size-xl: 22px;
+  --font-size-2xl: 28px;
+}

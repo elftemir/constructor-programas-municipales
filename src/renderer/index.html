@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1366, height=768, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self';">
+  <title>Podemos · Constructor de Programas Municipales</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/screens.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Header -->
+    <header class="top-bar">
+      <div class="brand" id="nav-brand" title="Volver al inicio" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+        <img src="assets/icons/emblema_adaptador_municipal_programa_marco.png" alt="Podemos" style="width: 24px; height: 24px; object-fit: contain; border-radius: 4px;" />
+        <span>Podemos</span>
+        <span style="font-weight: 400; color: var(--text-secondary);">·</span>
+        <span id="nav-brand-title">Constructor municipal</span>
+      </div>
+      <div class="project-name" id="top-project-name" style="display: none;">
+        <span id="top-project-title"></span>
+      </div>
+      <div class="save-indicator saved" id="top-save-indicator" style="display: none;">
+        <span>✓</span> <span>Guardado</span>
+      </div>
+      <div class="top-actions" id="top-actions" style="display: none;">
+        <button class="btn small" id="btn-quick-save" title="Guardar ahora (Ctrl+S)">Guardar</button>
+        <button class="btn small link" id="btn-close-project" title="Volver al menú de proyectos">Cerrar proyecto</button>
+      </div>
+    </header>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="nav-section-title" id="sidebar-proj-title">Constructor municipal</div>
+      <nav id="sidebar-nav">
+        <div class="step-item active" id="nav-inicio" data-view="home">
+          <span class="icon">🏠</span>
+          <span>Inicio</span>
+        </div>
+        <div class="step-item" id="nav-mis-programas" data-view="mis-programas">
+          <span class="icon">📁</span>
+          <span>Mis programas</span>
+        </div>
+        <div class="step-item" id="nav-fuentes" data-view="fuentes">
+          <span class="icon">📚</span>
+          <span>Programas fuente</span>
+        </div>
+        <div class="step-item" id="nav-areas-medidas" data-view="areas-medidas">
+          <span class="icon">📋</span>
+          <span>Áreas y medidas</span>
+        </div>
+        <div class="step-item" id="nav-textos-generales" data-view="textos-generales">
+          <span class="icon">📝</span>
+          <span>Textos del programa</span>
+        </div>
+        <div class="step-item" id="nav-vista-previa" data-view="vista-previa">
+          <span class="icon">👁</span>
+          <span>Vista previa</span>
+        </div>
+        <div class="step-item" id="nav-generar-docs" data-view="generar-documentos">
+          <span class="icon">📄</span>
+          <span>Generar documentos</span>
+        </div>
+        <div class="step-item" id="nav-ia" data-view="ia">
+          <span class="icon">✨</span>
+          <span>Inteligencia artificial</span>
+          <span class="nav-badge" id="badge-ia-optional">Opcional</span>
+        </div>
+      </nav>
+
+      <div style="margin: 14px 0 6px; border-top: 1px solid var(--border-divider);"></div>
+
+      <div class="step-item" id="nav-ayuda" data-view="ayuda">
+        <span class="icon">❓</span>
+        <span>Ayuda</span>
+      </div>
+      <div class="step-item" id="nav-configuracion" data-view="configuracion">
+        <span class="icon">⚙</span>
+        <span>Configuración</span>
+      </div>
+
+      <div class="sidebar-bottom">
+        <div class="notice-box">
+          <b>Fase 3 · Versión local</b><br>
+          Operación 100% sin conexión.<br>
+          Catálogo bilingüe v3.0.0.
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content" id="main-content">
+      <div id="view-container"></div>
+    </main>
+  </div>
+
+  <!-- Modal Container -->
+  <div id="modal-container" style="display: none;"></div>
+
+  <!-- Scripts -->
+  <script src="js/i18n.js"></script>
+  <script src="js/tutorial.js"></script>
+  <script src="js/utils/aiModalHelper.js"></script>
+  <script src="js/views/homeView.js"></script>
+  <script src="js/views/programsView.js"></script>
+  <script src="js/views/basicDataView.js"></script>
+  <script src="js/views/chooseMeasuresView.js"></script>
+  <script src="js/views/adaptMeasureView.js"></script>
+  <script src="js/views/generalTextsView.js"></script>
+  <script src="js/views/previewView.js"></script>
+  <script src="js/views/reviewExportView.js"></script>
+  <script src="js/views/marcoView.js"></script>
+  <script src="js/views/sourceProgramsView.js"></script>
+  <script src="js/views/importReviewView.js"></script>
+  <script src="js/views/optionsView.js"></script>
+  <script src="js/views/helpView.js"></script>
+  <script src="js/views/aiView.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

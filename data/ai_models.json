@@ -1,0 +1,54 @@
+{
+  "catalogVersion": "2.0.0-fase2",
+  "defaultEngine": "llama.cpp",
+  "models": [
+    {
+      "id": "qwen2.5-1.5b-instruct-q4",
+      "name": "Qwen 2.5 1.5B Instruct",
+      "provider": "huggingface",
+      "repoId": "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
+      "filename": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "hfModel": "Qwen/Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M",
+      "format": "GGUF",
+      "quantization": "Q4_K_M",
+      "engine": "llama.cpp",
+      "sizeBytes": 1117320736,
+      "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+      "recommendedRamGB": 8,
+      "recommended": true,
+      "description": "Perfil recomendado: equilibrio ideal entre precisión bilingüe (ES/CA), velocidad y consumo moderado de memoria."
+    },
+    {
+      "id": "qwen2.5-0.5b-instruct-q4",
+      "name": "Qwen 2.5 0.5B Instruct (Ultra ligero)",
+      "provider": "huggingface",
+      "repoId": "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
+      "filename": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "hfModel": "Qwen/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M",
+      "format": "GGUF",
+      "quantization": "Q4_K_M",
+      "engine": "llama.cpp",
+      "sizeBytes": 491400032,
+      "sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+      "recommendedRamGB": 4,
+      "recommended": false,
+      "description": "Perfil ligero: optimizado para ordenadores con menos de 4 GB de memoria RAM o recursos reducidos."
+    },
+    {
+      "id": "qwen2.5-3b-instruct-q4",
+      "name": "Qwen 2.5 3B Instruct (Alta precisión)",
+      "provider": "huggingface",
+      "repoId": "Qwen/Qwen2.5-3B-Instruct-GGUF",
+      "filename": "qwen2.5-3b-instruct-q4_k_m.gguf",
+      "hfModel": "Qwen/Qwen2.5-3B-Instruct-GGUF:Q4_K_M",
+      "format": "GGUF",
+      "quantization": "Q4_K_M",
+      "engine": "llama.cpp",
+      "sizeBytes": 2104932768,
+      "sha256": "626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d",
+      "recommendedRamGB": 16,
+      "recommended": false,
+      "description": "Perfil avanzado: máxima calidad en redacciones extensas y revisiones estilísticas para equipos con 8 GB o más de RAM."
+    }
+  ]
+}

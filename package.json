@@ -1,0 +1,111 @@
+{
+  "name": "constructor-programas-municipales",
+  "version": "3.3.0",
+  "description": "Constructor de Programas Municipales",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node scripts/build_i18n.js && node scripts/test_suite_v141.js && node scripts/test_suite_fase2.js",
+    "build": "node scripts/build_i18n.js && electron-builder --win --x64 --publish never"
+  },
+  "keywords": [
+    "programa-electoral",
+    "municipal"
+  ],
+  "author": {
+    "name": "elftemir",
+    "email": "elftemir@hotmail.com"
+  },
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elftemir/constructor-programas-municipales.git"
+  },
+  "bugs": {
+    "url": "https://github.com/elftemir/constructor-programas-municipales/issues"
+  },
+  "homepage": "https://github.com/elftemir/constructor-programas-municipales#readme",
+  "type": "commonjs",
+  "dependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "@xmldom/xmldom": "^0.9.12",
+    "electron-updater": "^6.8.9",
+    "jszip": "^3.10.2",
+    "pdf-parse": "^1.1.1",
+    "sql.js": "^1.14.2"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "org.podemos.constructor.municipal",
+    "productName": "Constructor de Programas Municipales Podemos",
+    "artifactName": "Programa_Electoral_Municipal_Setup_x64_v${version}.${ext}",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "elftemir",
+        "repo": "constructor-programas-municipales-updates",
+        "protocol": "https",
+        "channel": "latest",
+        "releaseType": "release",
+        "private": false
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Constructor de Programas Municipales Podemos",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "include": "build/installer.nsh"
+    },
+    "extraFiles": [
+      {
+        "from": "build/icon.ico",
+        "to": "app.ico"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "resources/ai-runtime",
+        "to": "ai-runtime",
+        "filter": [
+          "llama.cpp/llama-server.exe",
+          "llama.cpp/llama-server-impl.dll",
+          "llama.cpp/llama-common.dll",
+          "llama.cpp/llama.dll",
+          "llama.cpp/mtmd.dll",
+          "llama.cpp/ggml.dll",
+          "llama.cpp/ggml-base.dll",
+          "llama.cpp/ggml-rpc.dll",
+          "llama.cpp/ggml-cpu-*.dll",
+          "llama.cpp/libomp.dll",
+          "llama.cpp/LICENSE-LLVM-OpenMP"
+        ]
+      }
+    ],
+    "files": [
+      "src/**/*",
+      "data/**/*",
+      "!data/catalogo_marco.json",
+      "!data/programa_electoral.sqlite",
+      "!data/models/**/*",
+      "package.json"
+    ],
+    "asar": true
+  }
+}
