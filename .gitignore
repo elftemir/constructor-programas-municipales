@@ -1,0 +1,94 @@
+# ============================================================
+# Constructor de Programas Municipales
+# Archivos que NO deben publicarse en el repositorio fuente
+# ============================================================
+
+# Dependencias Node
+node_modules/
+
+# Compilaciones y empaquetados
+dist/
+out/
+release/
+
+# Instaladores y artefactos locales
+instalable/
+*.exe
+*.exe.blockmap
+latest.yml
+
+# Modelos de IA
+*.gguf
+*.ggml
+
+# Bases de datos y datos locales
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Copias de seguridad
+backups/
+backup/
+copias/
+*.bak
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Archivos temporales
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Variables de entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Certificados, claves y firma
+*.pfx
+*.p12
+*.pem
+*.key
+*.cer
+
+# Credenciales o tokens locales
+credentials.json
+secrets.json
+tokens.json
+
+# Cachés
+.cache/
+.npm/
+*.cache
+
+# Cobertura y tests generados
+coverage/
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+
+# Editores / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos de usuario
+*.user
+*.suo
+
+# Salidas temporales de PowerShell / scripts
+*.pid
+*.seed
