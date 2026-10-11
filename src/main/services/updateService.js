@@ -140,7 +140,7 @@ function classifyUpdaterError(err, wasDownloading = false) {
 class UpdateService {
   constructor() {
     const pkg = require('../../../package.json');
-    this.currentVersion = pkg.version || '3.3.0';
+    this.currentVersion = pkg.version || '3.4.0';
     this.listeners = new Set();
     this.autoCheckScheduled = false;
     this.explicitTestMode = false;

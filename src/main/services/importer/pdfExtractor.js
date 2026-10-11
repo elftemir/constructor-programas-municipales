@@ -36,7 +36,7 @@ class PdfExtractor {
     }
   }
 
-  structurePdfText(text) {
+  structurePdfText(text, options = {}) {
     const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
     const blocks = [];
 
@@ -54,7 +54,7 @@ class PdfExtractor {
       });
     }
 
-    return structuralClassifier.classifyDocument(blocks);
+    return structuralClassifier.classifyDocument(blocks, options);
   }
 }
 

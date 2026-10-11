@@ -676,5 +676,25 @@
     "generating_pdf": "Generando documento maestro y convirtiendo a PDF…",
     "success_pdf": "Documento PDF generado con éxito.",
     "success_both": "Documentos Word y PDF generados correctamente con el mismo diseño oficial."
+  },
+  "ocr": {
+    "plannedPages": "Páginas previstas para OCR: {{count}}.",
+    "estimateFirstPage": "El tiempo se calculará después de reconocer la primera página.",
+    "documentLanguage": "Idioma del documento",
+    "both": "Ambos (castellano y catalán)",
+    "parallel": "Procesar dos páginas en paralelo",
+    "progress": "Página {{current}} de {{total}}",
+    "calculating": "Calculando tiempo restante…",
+    "remaining": "Aproximadamente {{seconds}} s restantes",
+    "recognized": "Reconocido por OCR",
+    "unclassified": "Bloque sin clasificar: asigna su función documental",
+    "assignArea": "Asigna un nombre de área a los bloques pendientes antes de importar.",
+    "summary": "Resultado: {{native}} páginas con texto directo, {{ocr}} reconocidas por OCR, {{lowConfidence}} con baja fiabilidad y {{failed}} fallidas. Revisa el texto antes de confirmar.",
+    "OCR_UNAVAILABLE": "No se ha podido iniciar el reconocimiento de texto (OCR). Este PDF es una imagen escaneada y no contiene texto seleccionable. Importa una versión DOCX o un PDF con texto.",
+    "OCR_NO_TEXT": "No se ha podido reconocer texto en este documento. No se ha creado ninguna medida.",
+    "OCR_CANCELLED": "Reconocimiento cancelado. No se ha guardado contenido.",
+    "OCR_BUSY": "Ya hay un reconocimiento en curso. Cancélalo o espera a que termine.",
+    "OCR_INVALID_LANGUAGE": "Selecciona Castellano, Català o Ambos.",
+    "OCR_INVALID_FILE": "Selecciona un archivo PDF local válido."
   }
 }

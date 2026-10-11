@@ -95,6 +95,7 @@ const AiModalHelper = {
 
       try {
         const res = await window.api.aiSuggestTitles({
+          projectId: project.id,
           texto: measure.texto || measure.explicacion || '',
           tituloActual: measure.titulo || '',
           municipio: project.municipio || '',
@@ -360,7 +361,7 @@ const AiModalHelper = {
       }
 
       try {
-        currentResult = await window.api[taskMethod](taskParams);
+        currentResult = await window.api[taskMethod]({ projectId: typeof App !== 'undefined' ? App.currentProject?.id : undefined, ...taskParams });
         stopTimer();
         if (isCancelled) return;
 

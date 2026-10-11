@@ -76,6 +76,9 @@ const AiView = {
               : 'Asistente inteligente para redactar, adaptar, sintetizar y traducir tu programa electoral de forma autónoma.'}
           </p>
         </div>
+        <div class="view-header-right" style="display: flex; gap: 10px; align-items: center;">
+          <button class="btn small btn-help-screen" id="btn-help-this-screen" title="${isCa ? 'Ajuda d\'aquesta pantalla' : 'Ayuda de esta pantalla'}" aria-label="${isCa ? 'Ajuda d\'aquesta pantalla' : 'Ayuda de esta pantalla'}"><span class="help-qmark">?</span> ${isCa ? 'Ajuda' : 'Ayuda'}</button>
+        </div>
       </div>
 
       <!-- Garantía de privacidad y principio rector -->
@@ -524,6 +527,14 @@ const AiView = {
   bindEvents(isCa) {
     if (this.eventsBound) return;
     this.eventsBound = true;
+
+    // Click en botón de ayuda de pantalla
+    document.addEventListener('click', (e) => {
+      const btnHelp = e.target.closest('#btn-help-this-screen');
+      if (btnHelp) {
+        if (window.Tutorial) window.Tutorial.startSectionTour('ai');
+      }
+    });
 
     // Actualizar diagnóstico
     document.addEventListener('click', async (e) => {

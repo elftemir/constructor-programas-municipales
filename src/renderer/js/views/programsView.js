@@ -43,7 +43,8 @@ const ProgramsView = {
           <h1 class="title">${isCa ? 'Els meus programes municipals' : 'Mis programas municipales'}</h1>
           <p class="subtitle">${isCa ? 'Gestiona els programes creats, duplica per a altres municipis o importa fitxers .json.' : 'Gestiona los programas creados, duplica para otros municipios o importa archivos .json.'}</p>
         </div>
-        <div class="view-header-right" style="display: flex; gap: 10px;">
+        <div class="view-header-right" style="display: flex; gap: 10px; align-items: center;">
+          <button class="btn small btn-help-screen" id="btn-help-this-screen" title="${isCa ? 'Ajuda d\'aquesta pantalla' : 'Ayuda de esta pantalla'}" aria-label="${isCa ? 'Ajuda d\'aquesta pantalla' : 'Ayuda de esta pantalla'}"><span class="help-qmark">?</span> ${isCa ? 'Ajuda' : 'Ayuda'}</button>
           <button class="btn" id="btn-programs-goto-fuentes">
             📚 ${isCa ? 'Programes font' : 'Programas fuente'}
           </button>
@@ -140,6 +141,10 @@ const ProgramsView = {
   },
 
   bindEvents(container) {
+    container.querySelector('#btn-help-this-screen')?.addEventListener('click', () => {
+      if (window.Tutorial) window.Tutorial.startSectionTour('programs');
+    });
+
     container.querySelector('#btn-programs-goto-fuentes')?.addEventListener('click', () => {
       App.navigateTo('fuentes');
     });

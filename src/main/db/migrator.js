@@ -2,14 +2,15 @@ const fs = require('fs');
 const path = require('path');
 const { getUserDataDir } = require('../utils/paths');
 
-const TARGET_SCHEMA_VERSION = 4;
+const TARGET_SCHEMA_VERSION = 5;
 
 // Registro ordenado de migraciones
 const MIGRATIONS = [
   require('./migrations/001_initial_schema'),
   require('./migrations/002_phase3_sources'),
   require('./migrations/003_integrity_and_links'),
-  require('./migrations/004_content_updates')
+  require('./migrations/004_content_updates'),
+  require('./migrations/005_ocr_metadata')
 ];
 
 function tableExists(db, tableName) {
@@ -75,7 +76,7 @@ function detectSchemaLevel(db) {
   }
 
   if (hasContenidosInstalados) {
-    return 4;
+    return columnExists(db, 'programas_fuente', 'ocr_metadata_json') ? 5 : 4;
   }
 
   if (hasProyectoFuentes) {
@@ -107,14 +108,10 @@ function getMigrationBackupDir() {
   return backupDir;
 }
 
-function createMigrationBackup(db, fromVersion, toVersion) {
-  const backupDir = getMigrationBackupDir();
-  const filename = `constructor_pre_migration_schema${fromVersion}_to_schema${toVersion}_${getTimestampString()}.sqlite`;
-  const backupPath = path.join(backupDir, filename);
-
-  const data = db.export();
-  fs.writeFileSync(backupPath, Buffer.from(data));
-  console.log(`[Migrador] Copia de seguridad pre-migración creada con éxito: ${backupPath}`);
+function createMigrationBackup(db, fromVersion, toVersion, dbFilePath) {
+  const target = dbFilePath || path.join(getUserDataDir(), 'database', 'programa_electoral.sqlite');
+  const backupPath = require('./persistence').createBackup(target, Buffer.from(db.export()), 'schema' + fromVersion + '-to-' + toVersion);
+  console.log('[Migrador] Copia previa: ' + backupPath);
   return backupPath;
 }
 
@@ -254,6 +251,9 @@ async function migrate(db, options = {}) {
   // 3. Determinar nivel de partida si currentVer == 0
   const startLevel = detectSchemaLevel(db);
 
+  // Mandatory even for a new schema or a legacy database with missing user_version.
+  const backupFile = createMigrationBackup(db, startLevel, TARGET_SCHEMA_VERSION, options.dbFilePath);
+
   if (startLevel === TARGET_SCHEMA_VERSION) {
     // Si la base ya contenía todo pero tenía user_version=0, simplemente fijar user_version
     db.run(`PRAGMA user_version = ${TARGET_SCHEMA_VERSION};`);
@@ -265,13 +265,6 @@ async function migrate(db, options = {}) {
   }
 
   const preMetrics = collectMetrics(db);
-  let backupFile = null;
-
-  // 4. Crear copia de seguridad consistente SÓLO si hay datos reales existentes (startLevel > 0)
-  if (startLevel > 0) {
-    backupFile = createMigrationBackup(db, startLevel, TARGET_SCHEMA_VERSION);
-  }
-
   // 5. Ejecutar migraciones secuenciales en transacción
   const helpers = { tableExists, columnExists, addColumnIfNotExists };
 

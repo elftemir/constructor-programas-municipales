@@ -7,59 +7,75 @@ const migrator = require('./migrator');
 let db = null;
 let dbFilePath = null;
 
-async function getDb(customPath = null) {
+const { atomicWrite, backupFiles, createBackup, openChecked } = require('./persistence');
+let handlers = {};
+let opening = null;
+function setDatabaseHandlers(value) { handlers = value || {}; }
+async function getDb(customPath = null, options = {}) {
+  if (!customPath && opening) return opening;
   if (db && !customPath) return db;
-
+  const operation = openDatabase(customPath, options);
+  opening = operation;
+  try { return await operation; } finally { if (opening === operation) opening = null; }
+}
+async function openDatabase(customPath, options) {
   const SQL = await initSqlJs();
-  dbFilePath = customPath || getDatabasePath();
-
-  const dir = path.dirname(dbFilePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  // Check if we need to migrate from local development database (only for default user db path in development)
-  if (!customPath && !fs.existsSync(dbFilePath)) {
+  const target = customPath || getDatabasePath();
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  if (!customPath && !fs.existsSync(target)) {
     const devDbPath = path.join(__dirname, '..', '..', '..', 'data', 'programa_electoral.sqlite');
     if (fs.existsSync(devDbPath) && fs.statSync(devDbPath).size > 0) {
-      try {
-        fs.copyFileSync(devDbPath, dbFilePath);
-        console.log('Migrated existing SQLite database to user data directory:', dbFilePath);
-      } catch (err) {
-        console.warn('Could not copy dev database to user data directory:', err);
+      const bytes = fs.readFileSync(devDbPath);
+      const checked = openChecked(SQL, bytes); checked.close();
+      atomicWrite(target, bytes);
+    }
+  }
+  let candidate;
+  if (fs.existsSync(target)) {
+    try { candidate = openChecked(SQL, fs.readFileSync(target)); }
+    catch (cause) {
+      let recovery = null;
+      for (const file of backupFiles(target)) {
+        try {
+          const bytes = fs.readFileSync(file);
+          const checked = openChecked(SQL, bytes);
+          const version = migrator.getSchemaVersion(checked); checked.close();
+          if (version <= migrator.TARGET_SCHEMA_VERSION) { recovery = { file, bytes }; break; }
+        } catch (_) { /* Try the next valid startup backup. */ }
       }
+      const confirm = options.confirmRestore || handlers.confirmRestore;
+      if (!recovery || !confirm || !(await confirm({ databasePath: target, backupPath: recovery.file }))) {
+        const error = new Error(recovery ? 'Base de datos dañada. Restauración cancelada; el archivo original se conserva.' : 'Base de datos dañada y sin copia válida de arranque. El archivo original se conserva.');
+        error.code = 'ERR_DATABASE_CORRUPT'; error.cause = cause; throw error;
+      }
+      createBackup(target, fs.readFileSync(target), 'corrupt');
+      atomicWrite(target, recovery.bytes);
+      candidate = openChecked(SQL, recovery.bytes);
     }
+  } else candidate = new SQL.Database();
+  try {
+    // Once per opening, before any mutation. Never back up an unreadable database.
+    if (fs.existsSync(target)) createBackup(target, fs.readFileSync(target));
+    await migrator.migrate(candidate, { dbFilePath: target });
+    if (db && db !== candidate) db.close();
+    db = candidate; dbFilePath = target;
+    seedCatalog(customPath ? options.catalogPath : null);
+    save();
+    return db;
+  } catch (err) {
+    if (db === candidate) { db = null; dbFilePath = null; }
+    candidate.close();
+    throw err;
   }
-
-  if (fs.existsSync(dbFilePath)) {
-    try {
-      const fileBuffer = fs.readFileSync(dbFilePath);
-      db = new SQL.Database(fileBuffer);
-    } catch (e) {
-      console.warn('Error reading existing SQLite database, creating new one:', e);
-      db = new SQL.Database();
-    }
-  } else {
-    db = new SQL.Database();
-  }
-
-  // Ejecución controlada y transaccional de migraciones y validación
-  await migrator.migrate(db, { dbFilePath });
-
-  seedCatalog();
-  save();
-
-  return db;
 }
 
 function save() {
   if (!db || !dbFilePath) return;
-  try {
-    const data = db.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(dbFilePath, buffer);
-  } catch (err) {
+  try { atomicWrite(dbFilePath, Buffer.from(db.export())); }
+  catch (err) {
     console.error('Error saving SQLite database to disk:', err);
+    if (handlers.onSaveError) { try { handlers.onSaveError(err); } catch (_) {} }
+    throw err;
   }
 }
 
@@ -73,8 +89,8 @@ function closeDb() {
   }
 }
 
-function seedCatalog() {
-  const catalogPath = resolveAssetPath('data', 'catalogo_marco.json');
+function seedCatalog(testCatalogPath = null) {
+  const catalogPath = testCatalogPath || resolveAssetPath('data', 'catalogo_marco.json');
   if (!fs.existsSync(catalogPath)) {
     // En distribución libre limpia no se incluye catálogo político embebido; se usa el gestor de contenidos
     return;
@@ -180,6 +196,7 @@ function seedCatalog() {
 
 module.exports = {
   getDb,
+  setDatabaseHandlers,
   initDb: getDb,
   save,
   closeDb

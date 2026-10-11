@@ -572,6 +572,7 @@ class LlamaCppProvider extends BaseAiProvider {
   }
 
   async callChat(endpoint, messages, options = {}) {
+    await require('./contextBudget').checkContextBudget(endpoint, messages, options.max_tokens || 512, options.idioma);
     return new Promise((resolve, reject) => {
       const postData = JSON.stringify({
         messages,
@@ -649,8 +650,15 @@ class LlamaCppProvider extends BaseAiProvider {
     try {
       const endpoint = await this.manager.ensureServerRunning(this.modelPath, this.modelId);
       let systemPrompt = '';
-      if (task === 'traducir_texto_estructurado') {
-        const destIsCa = (promptConfig.a || promptConfig.to || (promptConfig.de === 'ca' ? 'es' : 'ca')) === 'ca';
+      if (task === 'traducir_texto') {
+        const sourceLang = promptConfig.de || promptConfig.from || (isCa ? 'es' : 'ca');
+        const destination = promptConfig.a || promptConfig.to || promptConfig.idioma_destino || (sourceLang === 'ca' ? 'es' : 'ca');
+        systemPrompt = destination === 'ca'
+          ? 'Ets un traductor professional. Tradueix fidelment al català, sense afegir, ometre ni inventar contingut. Respon únicament amb la traducció.'
+          : 'Eres un traductor profesional. Traduce fielmente al castellano, sin añadir, omitir ni inventar contenido. Responde únicamente con la traducción.';
+      } else if (task === 'traducir_texto_estructurado') {
+        const sourceLang = promptConfig.de || promptConfig.from || 'es';
+        const destIsCa = (promptConfig.a || promptConfig.to || promptConfig.idioma_destino || (sourceLang === 'ca' ? 'es' : 'ca')) === 'ca';
         systemPrompt = destIsCa
           ? `Ets un traductor professional especialitzat en documents polítics i municipals catalans.
 La teva tasca és traduir fidelment documents estructurats en JSON del castellà al català.
@@ -672,10 +680,10 @@ El teu objectiu és redactar textos amb veu política pròpia: propera, directa,
 CRITERIS GENERALS DE REDACCIÓ:
 1. ARRELAMENT LOCAL I HONESTEDAT:
    - Escriu des de la realitat quotidiana del municipi, els barris i els serveis públics. Diferencia el que pot fer l'Ajuntament de la resta d'administracions.
-   - No inventis carrers, barris, equipaments, dades, conflictes socials ni problemes inexistents que no estiguin al context.
+   - No inventis carrers, barris, equipaments, dades, conflictes socials ni problemes que no estiguin al context.
 2. VEU DIRECTA I PEDAGÒGICA:
    - Frases clares, paràgrafs nets i directes al gra.
-   - Explica amb claredat i honestedat els problemes concrets i les solucions que proposem per resoldre'ls.
+   - Explica amb claredat i honestedat els problemes veïnals concrets i les solucions que proposem per resoldre'ls.
    - Quan sigui pertinent, expressa amb redacció pròpia que governar implica establir prioritats clares i assumir responsabilitats públiques davant la ciutadania.
    - Llenguatge polític normal, humà i honest. Evita terminologia buida de consultoria, màrqueting electoral o burocràcia. No sonis com una IA intentant semblar política.
 3. CLIXÉS I FÓRMULES ESTRICTAMENT PROHIBIDES:
@@ -692,7 +700,7 @@ Tu objetivo es redactar textos con voz política propia: cercana, directa, pedag
 CRITERIOS GENERALES DE REDACCIÓN:
 1. ARRAIGO LOCAL Y HONESTIDAD:
    - Escribe desde la realidad cotidiana del municipio, los barrios y los servicios públicos. Diferencia lo que puede hacer el Ayuntamiento del resto de administraciones.
-   - No inventes calles, barrios, equipamientos, datos, conflictos sociales ni problemas inexistentes que estén en el contexto.
+   - No inventes calles, barrios, equipamientos, datos, conflictos sociales ni problemas que no estén en el contexto.
 2. VOZ DIRECTA Y PEDAGÓGICA:
    - Frases claras, párrafos limpios y directos al grano.
    - Explica con claridad y honestidad los problemas vecinales concretos y las soluciones que proponemos para resolverlos.
@@ -724,8 +732,8 @@ CRITERIOS GENERALES DE REDACCIÓN:
         }
         case 'desarrollar_medida': {
           userPrompt = isCa
-            ? `Afegeix una explicació breu (màxim 50 paraules) que desenvolupi com s'executarà aquesta mesura a ${mun}: indica quin problema veïnal concret atén, quina actuació municipal s'engega i com es garanteix la transparència i participació ciutadana, sense retòrica buida:\n"${text}"`
-            : `Añade una explicación breve (máximo 50 palabras) que desarrolle cómo se ejecutará esta medida en ${mun}: indica qué problema vecinal concreto atiende, qué actuación municipal se pone en marcha y cómo se garantiza la transparencia y participación ciudadana, sin retórica vacía:\n"${text}"`;
+            ? `Afegeix una explicació breu (màxim 50 paraules) que desenvolupi com s'executarà aquesta mesura a ${mun}: Descriu el tipus de necessitat que atén la mesura, sense afirmar dades, llocs ni problemes concrets del municipi que no apareguin al context. Explica l'actuació municipal proposada i la participació ciutadana:\n"${text}"`
+            : `Añade una explicación breve (máximo 50 palabras) que desarrolle cómo se ejecutará esta medida en ${mun}: Describe el tipo de necesidad que atiende la medida, sin afirmar datos, lugares ni problemas concretos del municipio que no aparezcan en el contexto. Explica la actuación municipal propuesta y la participación ciudadana:\n"${text}"`;
           break;
         }
         case 'mejorar_redaccion': {
@@ -812,7 +820,7 @@ La presentació és l'obertura política del programa. Ha d'expressar amb veu pr
 
 TÍTOL POLÍTIC EDITORIAL:
 - Proposa un titular editorial propi i evocador de 4 a 10 paraules que sintetitzi el projecte de municipi (sense cometes, sense punt final).
-- PROHIBIT titular: "Presentació", "Carta de presentació", "Presentación", "Obertura", "Cierre" o "Tancament".
+- PROHIBIT titular: "Presentació", "Carta de presentació", "Presentación", "Carta de presentación", "Obertura", "Apertura", "Cierre", "Tancament", "Conclusió" o "Conclusión".
 
 ENTRADILLA:
 - 1 frase completa i contundent de 15 a 35 paraules que sintetitzi la visió i el model de ciutat.
@@ -851,7 +859,7 @@ La presentación es la apertura política del programa. Debe expresar con voz pr
 
 TÍTULO POLÍTICO EDITORIAL:
 - Propón un titular editorial propio y evocador de 4 a 10 palabras que sintetice el proyecto de municipio (sin comillas, sin punto final).
-- PROHIBIDO titular: "Presentación", "Carta de presentación", "Presentació", "Apertura", "Cierre" o "Conclusión".
+- PROHIBIDO titular: "Presentación", "Carta de presentación", "Presentació", "Carta de presentació", "Apertura", "Obertura", "Cierre", "Tancament", "Conclusión" o "Conclusió".
 
 ENTRADILLA:
 - 1 frase completa y rotunda de 15 a 35 palabras que sintetice la visión y el modelo de ciudad.
@@ -1026,6 +1034,11 @@ RESPONDE ÚNICAMENTE CON EL ARRAY JSON:`;
           userPrompt = text;
       }
 
+      if (require('./municipalContext').WRITING_TASKS.has(task)) {
+        const context = promptConfig.contexto_municipal || require('./municipalContext').buildMunicipalContext(promptConfig, {}, lang);
+        userPrompt = context + '\n\n' + userPrompt;
+      }
+
       const defaultTemps = {
         adaptar_medida: 0.2,
         mejorar_redaccion: 0.2,
@@ -1047,7 +1060,7 @@ RESPONDE ÚNICAMENTE CON EL ARRAY JSON:`;
         const raw = await this.callChat(endpoint, [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
-        ], { max_tokens: maxTokens, timeout: timeoutMs, temperature: taskTemp });
+        ], { max_tokens: maxTokens, timeout: timeoutMs, temperature: taskTemp, idioma: lang });
 
         let res = (raw || '')
           .replace(/<think>[\s\S]*?<\/think>/gi, '')

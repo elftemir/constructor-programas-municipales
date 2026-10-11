@@ -323,7 +323,7 @@ async function createProject(data) {
   }
 
   const sourceProgramService = require('./sourceProgramService');
-  const activeFuente = sourceProgramService.getActive();
+  const activeFuente = await sourceProgramService.getActive();
   const fuenteId = data.fuente_id || (activeFuente ? activeFuente.id : 'fuente_marco_oficial');
 
   db.run(`

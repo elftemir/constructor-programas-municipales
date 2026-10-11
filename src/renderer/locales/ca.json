@@ -676,5 +676,25 @@
     "generating_pdf": "Generant document mestre i convertint a PDF…",
     "success_pdf": "Document PDF generat amb èxit.",
     "success_both": "Documents Word i PDF generats correctament amb el mateix disseny oficial."
+  },
+  "ocr": {
+    "plannedPages": "Pàgines previstes per a OCR: {{count}}.",
+    "estimateFirstPage": "El temps es calcularà després de reconèixer la primera pàgina.",
+    "documentLanguage": "Idioma del document",
+    "both": "Tots dos (castellà i català)",
+    "parallel": "Processar dues pàgines en paral·lel",
+    "progress": "Pàgina {{current}} de {{total}}",
+    "calculating": "Calculant el temps restant…",
+    "remaining": "Aproximadament {{seconds}} s restants",
+    "recognized": "Reconegut per OCR",
+    "unclassified": "Bloc sense classificar: assigna la seva funció documental",
+    "assignArea": "Assigna un nom d’àrea als blocs pendents abans d’importar.",
+    "summary": "Resultat: {{native}} pàgines amb text directe, {{ocr}} reconegudes per OCR, {{lowConfidence}} amb baixa fiabilitat i {{failed}} fallides. Revisa el text abans de confirmar.",
+    "OCR_UNAVAILABLE": "No s’ha pogut iniciar el reconeixement de text (OCR). Aquest PDF és una imatge escanejada i no conté text seleccionable. Importa una versió DOCX o un PDF amb text.",
+    "OCR_NO_TEXT": "No s’ha pogut reconèixer text en aquest document. No s’ha creat cap mesura.",
+    "OCR_CANCELLED": "Reconeixement cancel·lat. No s’ha desat contingut.",
+    "OCR_BUSY": "Ja hi ha un reconeixement en curs. Cancel·la’l o espera que acabi.",
+    "OCR_INVALID_LANGUAGE": "Selecciona Castellano, Català o Tots dos.",
+    "OCR_INVALID_FILE": "Selecciona un fitxer PDF local vàlid."
   }
 }

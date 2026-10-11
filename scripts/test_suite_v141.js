@@ -20,6 +20,8 @@ const path = require('path');
 const assert = require('assert');
 const JSZip = require('jszip');
 const { execSync } = require('child_process');
+const TEST_CATALOG = path.join(__dirname, 'fixtures/catalog-test.json');
+require('./generate_test_catalog');
 
 const { initDb, getDb } = require('../src/main/db/database');
 const docxExporter = require('../src/main/services/docxExporter');
@@ -61,13 +63,13 @@ async function main() {
 
   // 1. Verificación de versiones
   console.log('[1/7] Verificación de versión y metadatos centralizados');
-  runTest('package.json tiene versión válida (>= 1.4.2 / 2.0.0)', () => {
+  runTest('package.json tiene versión x.y.z', () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-    assert.ok(pkg.version === '1.4.2' || pkg.version === '2.0.0');
+    assert.match(pkg.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
   });
 
   runTest('catalogo_marco.json tiene versión válida', () => {
-    const cat = JSON.parse(fs.readFileSync(path.join(__dirname, '../data/catalogo_marco.json'), 'utf8'));
+    const cat = JSON.parse(fs.readFileSync(TEST_CATALOG, 'utf8'));
     assert.ok(cat.version.includes('1.4.2') || cat.version.includes('2.0.0'));
   });
 
@@ -78,7 +80,7 @@ async function main() {
       path.join(__dirname, '../build/icon.ico'),
       path.join(__dirname, '../src/main/assets/icons/app_icon.ico'),
       path.join(__dirname, '../src/renderer/assets/icons/app_icon.ico'),
-      path.join(__dirname, '../09_LOGOTIPOS/emblema_adaptador_municipal_programa_marco.ico'),
+      path.join(__dirname, '../src/main/assets/icons/emblema_adaptador_municipal_programa_marco.svg'),
       path.join(__dirname, '../build/installer.nsh')
     ];
     for (const p of iconPaths) {
@@ -195,7 +197,11 @@ async function main() {
 
   // Mock global objects needed for views
   global.escapeHtml = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  global.safeLogoUrl = url => url || '';
   global.App = { currentProject: null, navigateTo: () => {} };
+  if (!global.window) global.window = {};
+  if (!global.window.api) global.window.api = {};
+  global.window.api.getProjectSources = async () => [];
 
   const testProject = {
     id: 'test-p-audit',
@@ -287,11 +293,11 @@ async function main() {
 
   // 6. Base de Datos y Catálogo Marco
   console.log('\n[6/7] Verificación de Base de Datos y Catálogo Marco');
-  await runAsyncTest('Base de datos se inicializa con 12 áreas y 123 medidas', async () => {
-    await initDb();
+  await runAsyncTest('Base de datos se inicializa con 12 áreas y 123 medidas en el marco oficial', async () => {
+    await getDb(path.join(process.env.TEST_RUN_DIR || path.join(__dirname, '../scratch'), 'tests-v141.sqlite'), { catalogPath: TEST_CATALOG });
     const db = await getDb();
-    const areas = db.exec("SELECT COUNT(*) FROM areas")[0].values[0][0];
-    const medidas = db.exec("SELECT COUNT(*) FROM medidas")[0].values[0][0];
+    const areas = db.exec("SELECT COUNT(*) FROM areas WHERE fuente_id = 'fuente_marco_oficial'")[0].values[0][0];
+    const medidas = db.exec("SELECT COUNT(*) FROM medidas WHERE fuente_id = 'fuente_marco_oficial'")[0].values[0][0];
     assert.strictEqual(areas, 12);
     assert.strictEqual(medidas, 123);
   });

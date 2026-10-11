@@ -7,6 +7,7 @@ const ImportReviewView = {
   currentImportData: null,
   activeTargetSourceId: null,
   activeTargetLang: null,
+  batchImport: null,
 
   async openImportModal() {
     const isCa = window.i18n ? window.i18n.getLang() === 'ca' : false;
@@ -29,28 +30,31 @@ const ImportReviewView = {
             </div>
           </div>
 
-          <!-- Selección de idioma del documento -->
+          <!-- Dos versiones opcionales de la misma fuente -->
           <div style="margin-bottom: 20px;">
             <label style="font-size: 13px; font-weight: 700; color: #334155; display: block; margin-bottom: 8px;">
-              ${isCa ? 'Idioma principal del document' : 'Idioma principal del documento'}
+              ${isCa ? 'Un programa font, dos fitxers opcionals' : 'Un programa fuente, dos archivos opcionales'}
             </label>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
               <label class="card" style="padding: 12px 14px; border: 1.5px solid #cbd5e1; border-radius: 8px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                <input type="radio" name="import-init-lang" value="es" checked />
                 <div>
                   <strong style="display: block; font-size: 14px;">Castellano</strong>
-                  <span style="font-size: 11.5px; color: var(--text-muted);">${isCa ? 'Versió en castellà' : 'Versión en castellano'}</span>
+                  <button class="btn" id="btn-import-file-es">${isCa ? 'Seleccionar fitxer' : 'Seleccionar archivo'}</button>
+                  <span id="import-file-es" style="display:block; overflow-wrap:anywhere">${isCa ? 'No seleccionat (opcional)' : 'Sin seleccionar (opcional)'}</span>
+                  <button class="btn link" id="btn-import-clear-es">${isCa ? 'Treure' : 'Quitar'}</button>
                 </div>
               </label>
               <label class="card" style="padding: 12px 14px; border: 1.5px solid #cbd5e1; border-radius: 8px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                <input type="radio" name="import-init-lang" value="ca" />
                 <div>
                   <strong style="display: block; font-size: 14px;">Català</strong>
-                  <span style="font-size: 11.5px; color: var(--text-muted);">${isCa ? 'Versió en català' : 'Versión en catalán'}</span>
+                  <button class="btn" id="btn-import-file-ca">${isCa ? 'Seleccionar fitxer' : 'Seleccionar archivo'}</button>
+                  <span id="import-file-ca" style="display:block; overflow-wrap:anywhere">${isCa ? 'No seleccionat (opcional)' : 'Sin seleccionar (opcional)'}</span>
+                  <button class="btn link" id="btn-import-clear-ca">${isCa ? 'Treure' : 'Quitar'}</button>
                 </div>
               </label>
             </div>
           </div>
+          <p>${isCa ? 'Selecciona un o tots dos fitxers. Les versions es revisen per separat i es desen juntes al mateix programa.' : 'Selecciona uno o los dos archivos. Las versiones se revisan por separado y se guardan juntas en el mismo programa.'}</p>
 
           <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 22px; line-height: 1.5;">
             🔒 <b>${isCa ? 'Privadesa 100% local:' : 'Privacidad 100% local:'}</b>
@@ -61,8 +65,8 @@ const ImportReviewView = {
 
           <div style="display: flex; justify-content: flex-end; gap: 10px;">
             <button class="btn" id="btn-import-init-cancel">${isCa ? 'Cancel·lar' : 'Cancelar'}</button>
-            <button class="btn primary" id="btn-import-init-select-file" style="background: #7c3aed; border-color: #6d28d9; font-weight: 700;">
-              📂 ${isCa ? 'Seleccionar fitxer...' : 'Seleccionar archivo...'}
+            <button class="btn primary" id="btn-import-init-select-file" disabled style="background: #7c3aed; border-color: #6d28d9; font-weight: 700;">
+              📂 ${isCa ? 'Importar fitxers seleccionats' : 'Importar archivos seleccionados'}
             </button>
           </div>
         </div>
@@ -75,12 +79,89 @@ const ImportReviewView = {
       modalContainer.innerHTML = '';
     };
 
-    modalContainer.querySelector('#btn-import-init-cancel').addEventListener('click', close);
+    const files = {};
+    this.batchImport = null;
+    const refresh = lang => {
+      modalContainer.querySelector(`#import-file-${lang}`).textContent = files[lang] ? files[lang].split(/[\\/]/).pop() : (isCa ? 'No seleccionat (opcional)' : 'Sin seleccionar (opcional)');
+      modalContainer.querySelector('#btn-import-init-select-file').disabled = !files.es && !files.ca;
+    };
+    for (const lang of ['es', 'ca']) {
+      modalContainer.querySelector(`#btn-import-file-${lang}`).addEventListener('click', async () => {
+        const selected = await window.api.importerSelectFile();
+        if (selected) { files[lang] = selected; refresh(lang); }
+      });
+      modalContainer.querySelector(`#btn-import-clear-${lang}`).addEventListener('click', () => { delete files[lang]; refresh(lang); });
+    }
+    modalContainer.querySelector('#btn-import-init-cancel').addEventListener('click', () => { this.batchImport = null; close(); });
     modalContainer.querySelector('#btn-import-init-select-file').addEventListener('click', async () => {
-      const selectedLang = modalContainer.querySelector('input[name="import-init-lang"]:checked')?.value || 'es';
+      const entries = ['es', 'ca'].filter(lang => files[lang]).map(language => ({ language, filePath: files[language] }));
+      if (!entries.length) return;
+      const batch = { entries, index: 0, versions: {}, reviews: {}, name: '', busy: false, cancelled: false };
+      this.batchImport = batch;
       close();
-      await this.handleFileSelection(selectedLang);
+      await this.prepareBatchDocument(batch);
     });
+  },
+
+  async prepareBatchDocument(batch) {
+    if (batch.cancelled) return;
+    const { language, filePath } = batch.entries[batch.index];
+    if (batch.reviews?.[language]) {
+      batch.reviews[language].sourceName = batch.name;
+      this.openHierarchicalReviewScreen(batch.reviews[language]);
+      return;
+    }
+    this.showLoadingModal(window.i18n.getLang() === 'ca' ? 'Analitzant document…' : 'Analizando documento…');
+    try {
+      const analysis = await window.api.importerAnalyzeDocument(filePath, language);
+      this.closeModal();
+      if (batch.cancelled) return;
+      if (analysis.isScanned) {
+        this.showOcrPromptModal(filePath, language, analysis.pageCount, analysis.ocrPageCount, null, batch);
+      } else {
+        analysis.filePath = filePath; analysis.batchImport = batch;
+        if (batch.name) analysis.sourceName = batch.name;
+        this.currentImportData = analysis;
+        this.showPreReviewSummaryModal(analysis);
+      }
+    } catch (error) { this.closeModal(); alert(error.message); }
+  },
+
+  cancelBatch(batch) {
+    if (batch?.saving) return;
+    if (batch) { batch.cancelled = true; batch.versions = {}; batch.reviews = {}; }
+    this.batchImport = null;
+    this.currentImportData = null;
+  },
+
+  async confirmBatchVersion(data, areas) {
+    const batch = data.batchImport;
+    if (batch.cancelled || batch.busy || batch.completed) return;
+    batch.busy = true;
+    try {
+      batch.name = data.sourceName;
+      batch.reviews ||= {};
+      batch.reviews[data.language] = data;
+      batch.versions[data.language] = { areas, filePath: data.filePath, format: data.format,
+        ocr_metadata: data.pages ? { pages: data.pages, summary: data.summary } : null };
+      if (batch.index < batch.entries.length - 1) {
+        batch.index++;
+        await this.prepareBatchDocument(batch);
+        return;
+      }
+      App.notifySaving();
+      batch.saving = true;
+      const source = await window.api.importerConfirmImport({ nombre: batch.name, versions: batch.versions, setAsActive: false });
+      batch.completed = true;
+      App.notifySaved();
+      this.batchImport = null;
+      if (this.callingProjectId) {
+        await window.api.addSourceToProject(this.callingProjectId, source.id, 'complementaria');
+        this.callingProjectId = null;
+      }
+      alert(window.i18n.getLang() === 'ca' ? 'Programa font creat amb les versions seleccionades!' : '¡Programa fuente creado con las versiones seleccionadas!');
+      if (window.App) window.App.navigateTo('fuentes');
+    } finally { batch.saving = false; batch.busy = false; }
   },
 
   async handleFileSelection(language) {
@@ -96,7 +177,7 @@ const ImportReviewView = {
 
       if (analysis.isScanned) {
         // PDF escaneado detectado: ofrecer OCR
-        this.showOcrPromptModal(filePath, language, analysis.pageCount);
+        this.showOcrPromptModal(filePath, language, analysis.pageCount, analysis.ocrPageCount);
       } else {
         // Documento con texto estructurado: mostrar resumen previo
         analysis.filePath = filePath;
@@ -109,7 +190,7 @@ const ImportReviewView = {
     }
   },
 
-  showOcrPromptModal(filePath, language, pageCount) {
+  showOcrPromptModal(filePath, language, pageCount, ocrPageCount = pageCount, targetSourceId = null, batchImport = null) {
     const isCa = window.i18n ? window.i18n.getLang() === 'ca' : false;
     const modalContainer = document.querySelector('#modal-container') || document.body;
 
@@ -130,6 +211,15 @@ const ImportReviewView = {
             </div>
           </div>
 
+          <p>${window.i18n.t('ocr.plannedPages', { count: ocrPageCount })}</p>
+          <p>${window.i18n.t('ocr.estimateFirstPage')}</p>
+          <label>${window.i18n.t('ocr.documentLanguage')}
+            <select id="ocr-language" class="select" ${targetSourceId || batchImport ? 'disabled' : ''}>
+              <option value="es" ${language === 'es' ? 'selected' : ''}>Castellano</option>
+              <option value="ca" ${language === 'ca' ? 'selected' : ''}>Català</option>
+            </select>
+          </label>
+          <label id="ocr-parallel-label" style="display:none"><input type="checkbox" id="ocr-parallel" /> ${window.i18n.t('ocr.parallel')}</label>
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px;">
             <button class="btn" id="btn-ocr-cancel">${isCa ? 'Cancel·lar' : 'Cancelar'}</button>
             <button class="btn primary" id="btn-ocr-start" style="background: #7c3aed; border-color: #6d28d9; font-weight: 700;">
@@ -141,13 +231,19 @@ const ImportReviewView = {
     `;
     modalContainer.style.display = 'block';
 
-    modalContainer.querySelector('#btn-ocr-cancel').addEventListener('click', () => this.closeModal());
+    modalContainer.querySelector('#btn-ocr-cancel').addEventListener('click', () => { if (batchImport) this.cancelBatch(batchImport); this.closeModal(); });
     modalContainer.querySelector('#btn-ocr-start').addEventListener('click', async () => {
-      await this.runLocalOcr(filePath, language, pageCount);
+      const selected = modalContainer.querySelector('#ocr-language').value;
+      const workers = modalContainer.querySelector('#ocr-parallel').checked ? 2 : 1;
+      await this.runLocalOcr(filePath, selected, pageCount, { workers, primaryLanguage: selected, targetSourceId, batchImport });
     });
+    window.api.aiGetSpecs?.().then(specs => {
+      const label = modalContainer.querySelector('#ocr-parallel-label');
+      if (label && specs.totalMemGb >= 8) label.style.display = 'block';
+    }).catch(() => {});
   },
 
-  async runLocalOcr(filePath, language, pageCount) {
+  async runLocalOcr(filePath, language, pageCount, options = {}) {
     const isCa = window.i18n ? window.i18n.getLang() === 'ca' : false;
     const modalContainer = document.querySelector('#modal-container') || document.body;
 
@@ -176,36 +272,56 @@ const ImportReviewView = {
     const titleEl = modalContainer.querySelector('#ocr-progress-title');
     const statusEl = modalContainer.querySelector('#ocr-progress-status');
     const barEl = modalContainer.querySelector('#ocr-progress-bar');
+    this.currentImportData = null;
+    let cancelled = false;
 
     const unsubscribe = window.api.onImporterOcrProgress((prog) => {
-      if (statusEl) statusEl.textContent = isCa ? `Pàgina ${prog.current} de ${prog.total}` : `Página ${prog.current} de ${prog.total}`;
+      if (statusEl) statusEl.textContent = window.i18n.t('ocr.progress', { current: prog.current, total: prog.total }) + ' · ' +
+        (prog.remainingSeconds === null ? window.i18n.t('ocr.calculating') : window.i18n.t('ocr.remaining', { seconds: prog.remainingSeconds }));
       if (barEl) barEl.style.width = `${prog.percent}%`;
     });
 
     modalContainer.querySelector('#btn-cancel-ocr-process').addEventListener('click', async () => {
+      cancelled = true;
+      if (options.batchImport) this.cancelBatch(options.batchImport);
       await window.api.importerCancelOcr();
       unsubscribe();
       this.closeModal();
     });
 
     try {
-      const res = await window.api.importerRunOcr(filePath, language);
+      const { targetSourceId, batchImport, ...ocrOptions } = options;
+      const res = await window.api.importerRunOcr(filePath, language, ocrOptions);
       unsubscribe();
       this.closeModal();
+      if (cancelled || res.error?.code === 'OCR_CANCELLED') return;
+      if (res.ok === false) { alert(window.i18n.t(`ocr.${res.error.code}`)); return; }
       res.filePath = filePath;
+      res.targetSourceId = targetSourceId || null;
+      res.batchImport = batchImport || null;
+      if (batchImport?.name) res.sourceName = batchImport.name;
       this.currentImportData = res;
       this.showPreReviewSummaryModal(res);
     } catch (err) {
       unsubscribe();
       this.closeModal();
       if (!err.message.includes('cancelado')) {
-        alert(`Error en el OCR: ${err.message}`);
+        alert(window.i18n.t('ocr.OCR_UNAVAILABLE'));
       }
     }
   },
 
   showPreReviewSummaryModal(data) {
     const isCa = window.i18n ? window.i18n.getLang() === 'ca' : false;
+    if (data.summary) {
+      alert(window.i18n.t('ocr.summary', data.summary));
+    }
+    if (data.metadata?.unclassifiedBlocks?.length && !data.areas.some(a => a.unclassified)) {
+      data.areas.push({ title: '', unclassified: true, subareas: [], measures: data.metadata.unclassifiedBlocks.map(block => ({
+        text: block.text, title: '', tipo: 'contenido_general', ocr: block.origin === 'ocr',
+        pagina_origen: block.page, dudoso: true, requiresReview: true, reviewReason: window.i18n.t('ocr.unclassified')
+      })) });
+    }
     const modalContainer = document.querySelector('#modal-container') || document.body;
 
     const coverDetected = Boolean(data.metadata?.cover);
@@ -296,9 +412,10 @@ const ImportReviewView = {
     modalContainer.style.display = 'block';
 
     const nameInput = modalContainer.querySelector('#input-summary-source-name');
-    modalContainer.querySelector('#btn-summary-cancel').addEventListener('click', () => this.closeModal());
+    modalContainer.querySelector('#btn-summary-cancel').addEventListener('click', () => { if (data.batchImport) this.cancelBatch(data.batchImport); this.closeModal(); });
     modalContainer.querySelector('#btn-summary-proceed').addEventListener('click', () => {
       data.sourceName = (nameInput.value || '').trim() || data.sourceName;
+      if (data.batchImport) data.batchImport.name = data.sourceName;
       this.closeModal();
       this.openHierarchicalReviewScreen(data);
     });
@@ -306,6 +423,8 @@ const ImportReviewView = {
 
   openHierarchicalReviewScreen(data) {
     const isCa = window.i18n ? window.i18n.getLang() === 'ca' : false;
+    const hasNext = data.batchImport && data.batchImport.index < data.batchImport.entries.length - 1;
+    const confirmLabel = hasNext ? (isCa ? 'Revisar idioma següent' : 'Revisar siguiente idioma') : (isCa ? 'Confirmar importació' : 'Confirmar importación');
     const container = document.querySelector('#view-container');
     if (!container) return;
 
@@ -332,6 +451,7 @@ const ImportReviewView = {
           </p>
         </div>
         <div class="view-header-right" style="display: flex; gap: 10px; align-items: center;">
+          ${data.batchImport?.index > 0 ? `<button class="btn" id="btn-review-previous-language">${isCa ? 'Revisar idioma anterior' : 'Revisar idioma anterior'}</button>` : ''}
           ${(data.stats.requiresReviewCount > 0) ? `
             <button class="btn" id="btn-review-ai-classify" style="background: #f5f3ff; border: 1.5px solid #d8b4fe; color: #6d28d9; font-weight: 700; display: flex; align-items: center; gap: 6px;">
               🤖 ${isCa ? 'Analitzar elements dubtosos amb IA local' : 'Analizar elementos dudosos con IA local'}
@@ -341,7 +461,7 @@ const ImportReviewView = {
             ${isCa ? 'Cancel·lar importació' : 'Cancelar importación'}
           </button>
           <button class="btn primary" id="btn-review-confirm-all" style="background: #10b981; border-color: #059669; font-weight: 700; padding: 9px 18px;">
-            ✓ ${isCa ? 'Confirmar importació' : 'Confirmar importación'}
+            ✓ ${confirmLabel}
           </button>
         </div>
       </div>
@@ -369,7 +489,7 @@ const ImportReviewView = {
         <div style="display: flex; gap: 10px;">
           <button class="btn" id="btn-bottom-cancel">${isCa ? 'Cancel·lar' : 'Cancelar'}</button>
           <button class="btn primary" id="btn-bottom-confirm" style="background: #10b981; border-color: #059669; font-weight: 700; padding: 8px 20px;">
-            ✓ ${isCa ? 'Confirmar importació' : 'Confirmar importación'}
+            ✓ ${confirmLabel}
           </button>
         </div>
       </div>
@@ -452,6 +572,7 @@ const ImportReviewView = {
               <option value="ignorar" ${isIgnored ? 'selected' : ''}>${isCa ? '🗑️ Ignorar' : '🗑️ Ignorar'}</option>
             </select>
 
+            ${m.ocr ? `<span class="badge">${window.i18n.t('ocr.recognized')}</span>` : ''}
             ${hasWarning ? `
               <span class="badge" style="background: #fef3c7; color: #b45309; font-size: 11px; font-weight: 700;">
                 ⚠️ ${escapeHtml(m.reviewReason || (isCa ? 'Revisar' : 'Revisar'))}
@@ -723,7 +844,9 @@ const ImportReviewView = {
 
     // Cancelar importación
     const handleCancel = () => {
+      if (data.batchImport?.saving) return;
       if (confirm(isCa ? 'Vols cancel·lar la importació? Les dades extretes es descartaran.' : '¿Deseas cancelar la importación? Los datos extraídos se descartarán.')) {
+        if (data.batchImport) this.cancelBatch(data.batchImport);
         this.currentImportData = null;
         if (this.callingProjectId && window.App) {
           window.App.navigateTo('areas');
@@ -734,9 +857,20 @@ const ImportReviewView = {
     };
     container.querySelector('#btn-review-cancel-all')?.addEventListener('click', handleCancel);
     container.querySelector('#btn-bottom-cancel')?.addEventListener('click', handleCancel);
+    container.querySelector('#btn-review-previous-language')?.addEventListener('click', async () => {
+      const batch = data.batchImport;
+      if (batch && !batch.busy && batch.index > 0) {
+        batch.reviews[data.language] = data;
+        batch.index--;
+        await this.prepareBatchDocument(batch);
+      }
+    });
 
     // Confirmar importación
     const handleConfirm = async () => {
+      if (data.areas.some(a => !a.title.trim() && a.measures?.some(m => !m.ignored && m.tipo !== 'ignorar'))) {
+        alert(window.i18n.t('ocr.assignArea')); return;
+      }
       // Filtrar medidas válidas y separar introducciones de área
       const cleanedAreas = data.areas.map(a => {
         const introTexts = [];
@@ -764,13 +898,29 @@ const ImportReviewView = {
       }
 
       try {
+        if (data.batchImport) {
+          await this.confirmBatchVersion(data, cleanedAreas);
+          return;
+        }
         App.notifySaving();
+        if (data.targetSourceId) {
+          await window.api.importerAddLanguage(data.targetSourceId, data.language, {
+            origen_archivo: data.filePath,
+            areas: cleanedAreas,
+            ocr_metadata: data.pages ? { pages: data.pages, summary: data.summary } : null
+          });
+          App.notifySaved();
+          alert(isCa ? 'Versió associada amb èxit a la mateixa font!' : '¡Versión asociada con éxito a la misma fuente!');
+          if (window.App) window.App.navigateTo('fuentes');
+          return;
+        }
         const createdSource = await window.api.importerConfirmImport({
           nombre: data.sourceName,
           tipo: data.format,
           origen_archivo: data.filePath,
           idioma_inicial: data.language,
           areas: cleanedAreas,
+          ocr_metadata: data.pages ? { pages: data.pages, summary: data.summary } : null,
           setAsActive: false
         });
         App.notifySaved();
@@ -808,22 +958,13 @@ const ImportReviewView = {
       this.closeModal();
 
       if (analysis.isScanned) {
-        alert(isCa ? 'El document en aquest idioma és un PDF escanejat que requereix OCR.' : 'El documento en este idioma es un PDF escaneado que requiere OCR.');
+        this.showOcrPromptModal(filePath, targetLang, analysis.pageCount, analysis.ocrPageCount, sourceId);
         return;
       }
-
-      App.notifySaving();
-      await window.api.importerAddLanguage(sourceId, targetLang, {
-        origen_archivo: filePath,
-        areas: analysis.areas
-      });
-      App.notifySaved();
-
-      alert(isCa ? `Versió en ${targetName} associada amb èxit a la mateixa font!` : `¡Versión en ${targetName} asociada con éxito a la misma fuente!`);
-      if (window.SourceProgramsView) {
-        const container = document.querySelector('#view-container');
-        if (container) window.SourceProgramsView.render(container);
-      }
+      analysis.filePath = filePath;
+      analysis.targetSourceId = sourceId;
+      this.currentImportData = analysis;
+      this.showPreReviewSummaryModal(analysis);
     } catch (err) {
       this.closeModal();
       alert(`Error al asociar el idioma: ${err.message}`);

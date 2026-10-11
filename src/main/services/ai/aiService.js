@@ -905,6 +905,7 @@ class AiService {
   async runAiTask(taskName, params) {
     const startTime = Date.now();
     try {
+      params = await require('./municipalContext').enrichWritingParams(taskName, params);
       const normalizedParams = {
         ...params,
         area: params?.area || params?.area_nombre || '',

@@ -1,0 +1,20 @@
+const assert = require('assert'); const fs = require('fs'); const path = require('path');
+const { LlamaCppProvider } = require('../src/main/services/ai/aiProvider');
+const source = fs.readFileSync(path.join(__dirname, '../src/main/services/ai/aiProvider.js'), 'utf8');
+assert(source.includes('ni problemas que no estén en el contexto.'));
+assert(!source.includes('problemas inexistentes que estén'));
+(async () => {
+  const provider = new LlamaCppProvider('fixture', 'fixture');
+  provider.manager.ensureServerRunning = async () => 'http://127.0.0.1:1';
+  let captured;
+  provider.callChat = async (endpoint, messages) => { captured = messages; return 'Traducció de prova'; };
+  await provider.generate('traducir_texto', { texto: 'Texto de prueba', de: 'es', a: 'ca' });
+  assert(captured[0].content.includes('traductor professional'));
+  assert(!captured[0].content.includes('des de zero'));
+  assert(captured[1].content.includes('castellà al català'));
+  provider.callChat = async (endpoint, messages) => { captured = messages; return '{"titulo":"Prueba"}'; };
+  await provider.generate('traducir_texto_estructurado', { objeto: { titulo: 'Prova' }, from: 'ca', idioma_destino: 'es' });
+  assert(captured[0].content.includes('del catalán al castellano'));
+  assert(captured[1].content.includes('del catalán al castellano'));
+  console.log('PASS corrected system prompt, faithful translation and matching language aliases');
+})().catch(error => { console.error(error); process.exitCode = 1; });

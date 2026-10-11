@@ -33,6 +33,7 @@ const SourceProgramsView = {
           </p>
         </div>
         <div class="view-header-right" style="display: flex; gap: 12px; align-items: center;">
+          <button class="btn small btn-help-screen" id="btn-help-this-screen" title="${isCa ? 'Ajuda d\'aquesta pantalla' : 'Ayuda de esta pantalla'}" aria-label="${isCa ? 'Ajuda d\'aquesta pantalla' : 'Ayuda de esta pantalla'}"><span class="help-qmark">?</span> ${isCa ? 'Ajuda' : 'Ayuda'}</button>
           <button class="btn primary" id="btn-import-new-source" style="background: #7c3aed; border-color: #6d28d9; font-weight: 700; padding: 9px 18px; display: flex; align-items: center; gap: 8px;">
             <span>➕</span> ${isCa ? 'Importar programa font' : 'Importar programa fuente'}
           </button>
@@ -225,6 +226,10 @@ const SourceProgramsView = {
 
   bindEvents(container) {
     const isCa = window.i18n ? window.i18n.getLang() === 'ca' : false;
+
+    container.querySelector('#btn-help-this-screen')?.addEventListener('click', () => {
+      if (window.Tutorial) window.Tutorial.startSectionTour('source_programs');
+    });
 
     // Toggle mostrar archivados
     const chkArchived = container.querySelector('#chk-show-archived');

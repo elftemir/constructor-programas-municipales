@@ -124,3 +124,55 @@ $RECYCLE.BIN/
 # Salidas temporales de PowerShell / scripts
 *.pid
 *.seed
+
+# Runtime OCR reproducible; se prepara mediante setup_ocr_runtime.js
+resources/ocr-runtime/
+scripts/fixtures/ocr-*.pdf
+
+# Preparacion de publicaciones y referencias internas (nunca se suben como codigo)
+/10_Constructor Carpetas GIHUB/
+/0[0-9]_*/
+/cartepa instalada respeldo/
+/RESUMEN_CONVERSACION*.md
+/extracted_*.png
+/test_sample_logo.jpg
+/test_suite_v121.js
+/test_suite_v122.js
+**/catalogo_marco.json
+*.blockmap
+*.dll
+resources/ai-runtime/llama.cpp/
+
+# Scripts publicables: los demas son inspecciones locales o pruebas antiguas
+/scripts/*
+!/scripts/build_i18n.js
+!/scripts/run_tests.js
+!/scripts/test_suite_v141.js
+!/scripts/test_suite_fase2.js
+!/scripts/test_ocr.js
+!/scripts/test_ocr_languages.js
+!/scripts/test_import_batch.js
+!/scripts/test_prompt_integrity.js
+!/scripts/test_municipal_context.js
+!/scripts/test_database_safety.js
+!/scripts/test_export_availability.js
+!/scripts/test_ocr_i18n.js
+!/scripts/test_electron_ocr.js
+!/scripts/test_packaged_ocr.js
+!/scripts/probe_packaged_ocr.js
+!/scripts/test_nsis_initialization.js
+!/scripts/test_nsis_shortcuts.js
+!/scripts/generate_ocr_fixtures.js
+!/scripts/generate_test_catalog.js
+!/scripts/setup_ocr_runtime.js
+!/scripts/setup_ocr_licenses.js
+!/scripts/setup_llama_runtime.js
+!/scripts/pack_ocr_runtime.js
+!/scripts/prepare_release.js
+!/scripts/preparar_publicacion.js
+!/scripts/publicacion_guia.js
+!/scripts/test_preparar_publicacion.js
+!/scripts/fixtures/
+/scripts/fixtures/*
+!/scripts/fixtures/catalog-test.json
+!/scripts/fixtures/catalog-minimal.json

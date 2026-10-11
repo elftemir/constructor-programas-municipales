@@ -80,3 +80,28 @@ A continuación se relacionan las dependencias, bibliotecas y componentes de ter
 ## 4. Datos y Recursos
 
 - **Datos de Municipios (INE / Cataluña)**: Derivados de datos abiertos del Instituto Nacional de Estadística (INE) e Institut d'Estadística de Catalunya (Idescat), utilizados bajo condiciones de reutilización de la información del sector público.
+
+## OCR local incorporado en 3.5.0
+
+Tesseract.js y tesseract.js-core 7.0.0: Apache-2.0; PDF.js (pdfjs-dist) 6.4.299: Apache-2.0; @napi-rs/canvas 1.0.11 y binario Windows x64: MIT. Datos spa y cat de tessdata_fast, commit 87416418657359cb625c412a48b6e1d6d41c29bd: Apache-2.0.
+
+Dependencias transitivas empaquetadas:
+
+- tesseract.js 7.0.0: Apache-2.0
+- bmp-js 0.1.0: MIT
+- idb-keyval 6.3.0: Apache-2.0
+- is-url 1.2.4: MIT
+- node-fetch 2.7.0: MIT
+- whatwg-url 5.0.0: MIT
+- tr46 0.0.3: MIT
+- webidl-conversions 3.0.1: BSD-2-Clause
+- opencollective-postinstall 2.0.3: MIT
+- regenerator-runtime 0.13.11: MIT
+- tesseract.js-core 7.0.0: Apache-2.0
+- wasm-feature-detect 1.9.0: Apache-2.0
+- zlibjs 0.3.1: MIT
+- pdfjs-dist 6.4.299: Apache-2.0
+- @napi-rs/canvas 1.0.11: MIT
+- @napi-rs/canvas-win32-x64-msvc 1.0.11: MIT
+
+El binario de canvas incorpora bibliotecas adicionales, incluidas componentes con MPL-2.0, BSD, FTL, ICU y Zlib. Se distribuye su SBOM original en ocr-runtime/node_modules/@napi-rs/canvas-win32-x64-msvc/sbom.cdx.json y los avisos y fuentes correspondientes en ocr-runtime/licenses/. No se incorpora un motor OCR AGPL.

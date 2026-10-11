@@ -254,11 +254,38 @@ class SourceProgramService {
     return true;
   }
 
-  async createSourceProgram({ nombre, tipo, origen_archivo, idioma_inicial = 'es', areas = [], setAsActive = false }) {
+  async createImportedSource(data) {
+    if (!data.versions) return this.createSourceProgram(data);
+    const versions = data.versions;
+    const langs = ['es', 'ca'].filter(lang => versions[lang]);
+    if (!langs.length || Object.keys(versions).some(lang => !['es', 'ca'].includes(lang))) throw new Error('Selecciona al menos un archivo en castellano o catalán.');
+    for (const lang of langs) if (!Array.isArray(versions[lang].areas) || !versions[lang].areas.length) throw new Error('Revisa las áreas del documento antes de confirmar.');
+    const db = await getDb();
+    let source;
+    db.run('BEGIN TRANSACTION');
+    try {
+      const firstLang = langs[0]; const first = versions[firstLang];
+      source = await this.createSourceProgram({ nombre: data.nombre, tipo: first.format,
+        idioma_inicial: firstLang, origen_archivo: first.filePath, areas: first.areas,
+        ocr_metadata: first.ocr_metadata, setAsActive: Boolean(data.setAsActive) }, { deferSave: true });
+      if (langs.length === 2) {
+        const second = versions[langs[1]];
+        source = await this.addLanguageToSource(source.id, langs[1], { areas: second.areas,
+          origen_archivo: second.filePath, ocr_metadata: second.ocr_metadata }, { deferSave: true, externalTransaction: true });
+      }
+      db.run('COMMIT');
+    } catch (error) { db.run('ROLLBACK'); throw error; }
+    save();
+    return source;
+  }
+
+  async createSourceProgram({ nombre, tipo, origen_archivo, idioma_inicial = 'es', areas = [], setAsActive = false, ocr_metadata = null }, options = {}) {
     const db = await getDb();
     const cleanName = (nombre || '').trim() || 'Nuevo programa fuente';
     const sourceId = `fuente_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const now = new Date().toISOString();
+    const metadataJson = ocr_metadata ? JSON.stringify(ocr_metadata) : null;
+    if (metadataJson && metadataJson.length > 20 * 1024 * 1024) throw new Error('OCR_METADATA_TOO_LARGE');
 
     const isEs = idioma_inicial === 'es';
     const idiomas = {
@@ -293,6 +320,9 @@ class SourceProgramService {
       ]
     );
 
+    if (ocr_metadata) {
+      db.run('UPDATE programas_fuente SET ocr_metadata_json = ? WHERE id = ?', [metadataJson, sourceId]);
+    }
     // Insertar áreas y medidas
     areas.forEach((area, areaIdx) => {
       const areaId = `${sourceId}_area_${areaIdx + 1}`;
@@ -348,14 +378,44 @@ class SourceProgramService {
       });
     });
 
-    save();
+    if (!options.deferSave) save();
     return await this.getById(sourceId);
   }
 
-  async addLanguageToSource(sourceId, targetLang, { origen_archivo, areas = [] }) {
+  async addLanguageToSource(sourceId, targetLang, { origen_archivo, areas = [], ocr_metadata = null }, options = {}) {
+    if (!['es', 'ca'].includes(targetLang)) throw new Error('Idioma no válido: utiliza castellano o catalán.');
     const db = await getDb();
     const source = await this.getById(sourceId);
     if (!source) throw new Error(`Programa fuente no encontrado: ${sourceId}`);
+    if (source.idiomas?.[targetLang]?.disponible) throw new Error('Esta fuente ya tiene una versión en ese idioma.');
+
+    // Validate the whole correspondence before changing any language column.
+    const existingAreas = source.areas || [];
+    if (!areas.length || areas.length !== existingAreas.length) throw new Error('Las versiones deben tener las mismas áreas. Revisa su estructura antes de asociarlas.');
+    const matches = areas.map((area, i) => {
+      const existing = existingAreas[i].medidas || [];
+      const incoming = area.measures || area.medidas || [];
+      if (existing.length !== incoming.length) throw new Error('Las versiones deben tener las mismas medidas por área. Revisa su estructura antes de asociarlas.');
+      const used = new Set();
+      return incoming.map((measure, index) => {
+        if (!(measure.text || measure.texto || '').trim()) throw new Error('Hay una medida sin texto en el idioma que estás asociando. Revisa el documento.');
+        const number = measure.sourceNumber || measure.numero_origen;
+        const match = number ? existing.find(m => String(m.numero_origen) === String(number)) : existing[index];
+        if (!match || used.has(match.id)) throw new Error('La numeración de las medidas no coincide o está duplicada. Revisa ambas versiones.');
+        used.add(match.id);
+        return match;
+      });
+    });
+    const metadata = JSON.parse(source.ocr_metadata_json || '{}');
+    if (ocr_metadata) {
+      metadata.languages ||= {};
+      for (const lang of ['es', 'ca']) if (source.idiomas?.[lang]?.disponible && metadata.pages && !metadata.languages[lang]) {
+        metadata.languages[lang] = { pages: metadata.pages, summary: metadata.summary };
+      }
+      metadata.languages[targetLang] = ocr_metadata;
+    }
+    const metadataJson = JSON.stringify(metadata);
+    if (metadataJson.length > 20 * 1024 * 1024) throw new Error('OCR_METADATA_TOO_LARGE');
 
     const now = new Date().toISOString();
     const idiomas = source.idiomas || {};
@@ -364,7 +424,8 @@ class SourceProgramService {
     const isCa = targetLang === 'ca';
 
     // Alinear áreas existentes con nuevas áreas del documento en targetLang
-    const existingAreas = source.areas || [];
+    if (!options.externalTransaction) db.run('BEGIN TRANSACTION');
+    try {
     areas.forEach((newArea, idx) => {
       const matchArea = existingAreas[idx];
       if (matchArea) {
@@ -375,15 +436,11 @@ class SourceProgramService {
           db.run(`UPDATE areas SET nombre_es = ? WHERE id = ?`, [newAreaName, matchArea.id]);
         }
 
-        const existingMedidas = matchArea.medidas || [];
         const newMeasures = newArea.measures || newArea.medidas || [];
 
         newMeasures.forEach((newM, mIdx) => {
           // Intentar emparejar por número de origen o por índice
-          let matchM = existingMedidas.find(em => em.numero_origen && em.numero_origen === newM.sourceNumber);
-          if (!matchM) {
-            matchM = existingMedidas[mIdx];
-          }
+          const matchM = matches[idx][mIdx];
 
           if (matchM) {
             const tit = (newM.title || newM.titulo || '').trim();
@@ -401,17 +458,23 @@ class SourceProgramService {
                 [tit, txt, exp, matchM.id]
               );
             }
+            if (newM.requiresReview || newM.dudoso) {
+              const warning = `[${targetLang}] ${newM.reviewReason || newM.motivo_duda || 'Revisar texto OCR'}`;
+              db.run('UPDATE medidas SET dudoso = 1, motivo_duda = ? WHERE id = ?',
+                [[matchM.motivo_duda, warning].filter(Boolean).join('; '), matchM.id]);
+            }
           }
         });
       }
     });
 
     db.run(
-      `UPDATE programas_fuente SET idiomas_json = ?, updated_at = ? WHERE id = ?`,
-      [JSON.stringify(idiomas), now, sourceId]
+      `UPDATE programas_fuente SET idiomas_json = ?, ocr_metadata_json = ?, updated_at = ? WHERE id = ?`,
+      [JSON.stringify(idiomas), metadataJson, now, sourceId]
     );
-
-    save();
+    if (!options.externalTransaction) db.run('COMMIT');
+    } catch (error) { if (!options.externalTransaction) db.run('ROLLBACK'); throw error; }
+    if (!options.deferSave) save();
     return await this.getById(sourceId);
   }
 

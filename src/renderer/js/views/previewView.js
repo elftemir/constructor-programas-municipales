@@ -36,6 +36,7 @@ const PreviewView = {
           <p class="subtitle">${isCa ? 'Visualitza la distribució real del contingut per pàgines abans de generar el Word.' : 'Visualiza la distribución real del contenido por páginas antes de generar el Word.'}</p>
         </div>
         <div class="view-header-right" style="display: flex; gap: 10px; align-items: center;">
+          <button class="btn small btn-help-screen" id="btn-help-this-screen" title="${isCa ? 'Ajuda d\'aquesta pantalla' : 'Ayuda de esta pantalla'}" aria-label="${isCa ? 'Ajuda d\'aquesta pantalla' : 'Ayuda de esta pantalla'}"><span class="help-qmark">?</span> ${isCa ? 'Ajuda' : 'Ayuda'}</button>
           <button class="btn" id="btn-back-to-measures">
             ← ${isCa ? 'Tornar a revisar' : 'Volver a revisar'}
           </button>
@@ -334,6 +335,10 @@ const PreviewView = {
   },
 
   bindEvents(container, project, isCa) {
+    container.querySelector('#btn-help-this-screen')?.addEventListener('click', () => {
+      if (window.Tutorial) window.Tutorial.startSectionTour('preview');
+    });
+
     // Navigation buttons
     const btnBack = container.querySelector('#btn-back-to-measures');
     if (btnBack) {

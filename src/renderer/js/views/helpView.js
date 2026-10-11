@@ -171,10 +171,122 @@ const HelpView = {
       answer_es: 'Si tu equipo tiene 8 GB de RAM o recursos estándar, el motor integrado o modelos de 2B parámetros (como Gemma 2 2B) ofrecen respuestas inmediatas sin ralentizaciones. Si cuentas con 16 GB de RAM o más y procesador potente, modelos de 7B u 8B (como Qwen 2.5 7B o Llama 3.1 8B) aportarán mayor riqueza estilística y precisión sintáctica.',
       answer_ca: 'Si el teu equip té 8 GB de RAM o recursos estàndard, el motor integrat o models de 2B paràmetres (com Gemma 2 2B) ofereixen respostes immediates sense alentiments. Si disposes de 16 GB de RAM o més i processador potent, models de 7B o 8B (com Qwen 2.5 7B o Llama 3.1 8B) aportaran major riquesa estilística i precisió sintàctica.',
       category: 'ai'
+    },
+    {
+      id: 'faq-sources-1',
+      question_es: '¿Qué es un Programa Fuente y cómo se diferencia del programa marco?',
+      question_ca: 'Què és un Programa Font i com es diferencia del programa marc?',
+      answer_es: 'Un Programa Fuente es el documento político o catálogo base a partir del cual se generan los programas municipales. El Programa Marco oficial es la fuente de referencia de partida, pero ahora puedes gestionar múltiples programas fuente (autonómicos, sectoriales o de mandatos anteriores) e incluso importar los tuyos propios.',
+      answer_ca: 'Un Programa Font és el document polític o catàleg base a partir del qual es generen els programes municipals. El Programa Marc oficial és la font de referència de partida, però ara pots gestionar múltiples programes font (autonòmics, sectorials o de mandats anteriors) i fins i tot importar els teus propis.',
+      category: 'sources'
+    },
+    {
+      id: 'faq-sources-2',
+      question_es: '¿Puedo importar mi propio documento como programa fuente?',
+      question_ca: 'Puc importar el meu propi document com a programa font?',
+      answer_es: 'Sí. Desde la sección "Programas fuente" puedes importar documentos propios en formatos Word (.docx) o PDF. El sistema analizará la estructura y extraerá las áreas temáticas y propuestas para utilizarlas como base en tus nuevos proyectos municipales.',
+      answer_ca: 'Sí. Des de la secció "Programes font" pots importar documents propis en formats Word (.docx) o PDF. El sistema analitzarà l\'estructura i n\'extraurà les àrees temàtiques i propostes per utilitzar-les com a base en els teus nous projectes municipals.',
+      category: 'sources'
+    },
+    {
+      id: 'faq-sources-3',
+      question_es: '¿Qué ocurre si no tengo ningún programa marco instalado o deseo instalar otros?',
+      question_ca: 'Què passa si no tinc cap programa marc instal·lat o vull instal·lar-ne d\'altres?',
+      answer_es: 'La aplicación incluye de serie el marco oficial protegido. Si necesitas nuevos programas marco o contenidos actualizados, puedes obtenerlos desde el canal de contenidos o instalarlos directamente desde la gestión de Programas Fuente.',
+      answer_ca: 'L\'aplicació inclou de sèrie el marc oficial protegit. Si necessites nous programes marc o continguts actualitzats, pots obtenir-los des del canal de continguts o instal·lar-los directament des de la gestió de Programes Font.',
+      category: 'sources'
+    },
+    {
+      id: 'faq-sources-4',
+      question_es: '¿Los programas marco están disponibles en varios idiomas oficiales?',
+      question_ca: 'Els programes marc estan disponibles en diversos idiomes oficials?',
+      answer_es: 'Sí. Los programas marco oficiales se proporcionan de forma bilingüe (castellano y catalán) con textos originales aprobados para cada lengua, sin depender de traducción automática no supervisada.',
+      answer_ca: 'Sí. Els programes marc oficials es proporcionen de forma bilingüe (castellà i català) amb textos originals aprovats per a cada llengua, sense dependre de traducció automàtica no supervisada.',
+      category: 'sources'
+    },
+    {
+      id: 'faq-updates-1',
+      question_es: '¿Cómo sé si hay una nueva versión de la aplicación o de los contenidos?',
+      question_ca: 'Com sé si hi ha una nova versió de l\'aplicació o dels continguts?',
+      answer_es: 'Tanto en la pantalla de Inicio como en Configuración verás el estado de actualizaciones. Si estás conectado a internet, la app comprueba periódicamente si existen nuevas versiones del instalador o nuevos paquetes de contenidos aprobados.',
+      answer_ca: 'Tant a la pantalla d\'Inici com a Configuració veuràs l\'estat de les actualitzacions. Si estàs connectat a internet, l\'app comprova periòdicament si existeixen noves versions de l\'instal·lador o nous paquets de continguts aprovats.',
+      category: 'updates'
+    },
+    {
+      id: 'faq-updates-2',
+      question_es: '¿Cuál es la diferencia entre actualizar la aplicación y actualizar los contenidos?',
+      question_ca: 'Quina és la diferència entre actualitzar l\'aplicació i actualitzar els continguts?',
+      answer_es: 'Actualizar la aplicación renueva el software ejecutable (mejoras de interfaz, nuevas herramientas o correcciones técnicas). Actualizar los contenidos descarga o renueva catálogos políticos de referencia sin modificar el código del programa.',
+      answer_ca: 'Actualitzar l\'aplicació renova el programari executable (millores d\'interfície, noves eines o correccions tècniques). Actualitzar els continguts descarrega o renova catàlegs polítics de referència sense modificar el codi del programa.',
+      category: 'updates'
+    },
+    {
+      id: 'faq-updates-3',
+      question_es: '¿Se pierden mis proyectos municipales al actualizar la aplicación o los contenidos?',
+      question_ca: 'Es perden els meus projectes municipals en actualitzar l\'aplicació o els continguts?',
+      answer_es: 'No. Tus programas municipales y borradores se guardan en la carpeta de datos de usuario de tu ordenador y quedan totalmente intactos y protegidos tras cualquier actualización de software o catálogo.',
+      answer_ca: 'No. Els teus programes municipals i esborranys es guarden a la carpeta de dades d\'usuari del teu ordinador i queden totalment intactes i protegits després de qualsevol actualització de programari o catàleg.',
+      category: 'updates'
+    },
+    {
+      id: 'faq-updates-4',
+      question_es: '¿Cambia automáticamente la fuente de mis proyectos en curso al actualizar un catálogo?',
+      question_ca: 'Canvia automàticament la font dels meus projectes en curs en actualitzar un catàleg?',
+      answer_es: 'No. Cada proyecto municipal conserva la fuente y las decisiones con las que fue creado para no alterar trabajos en marcha. Eres tú quien decide si deseas iniciar un nuevo proyecto con la nueva fuente o continuar con la existente.',
+      answer_ca: 'No. Cada projecte municipal conserva la font i les decisions amb què va ser creat per no alterar treballs en marxa. Ets tu qui decideix si vols iniciar un nou projecte amb la nova font o continuar amb l\'existent.',
+      category: 'updates'
+    },
+    {
+      id: 'faq-updates-5',
+      question_es: '¿Puedo seguir trabajando completamente sin conexión a internet si no deseo actualizar?',
+      question_ca: 'Puc continuar treballant completament sense connexió a internet si no vull actualitzar?',
+      answer_es: 'Por supuesto. La aplicación está diseñada bajo el principio "offline-first". La comprobación de actualizaciones es opcional y puedes trabajar, editar, redactar con IA local y exportar documentos sin necesidad de conexión alguna.',
+      answer_ca: 'I tant. L\'aplicació està dissenyada sota el principi "offline-first". La comprovació d\'actualitzacions és opcional i pots treballar, editar, redactar amb IA local i exportar documents sense cap necessitat de connexió.',
+      category: 'updates'
+    },
+    {
+      id: 'faq-import-1',
+      question_es: '¿Qué formatos de archivo puedo importar y cómo funciona el reconocimiento de texto (OCR)?',
+      question_ca: 'Quins formats de fitxer puc importar i com funciona el reconeixement de text (OCR)?',
+      answer_es: 'Puedes importar documentos en formato Microsoft Word (.docx) y archivos PDF. Si un PDF contiene texto digital se extrae de inmediato; si se trata de un documento escaneado, el módulo de OCR local procesa las imágenes para recuperar las propuestas.',
+      answer_ca: 'Pots importar documents en format Microsoft Word (.docx) i fitxers PDF. Si un PDF conté text digital s\'extreu immediatament; si es tracta d\'un document escanejat, el mòdul d\'OCR local processa les imatges per recuperar les propostes.',
+      category: 'import'
+    },
+    {
+      id: 'faq-export-1',
+      question_es: '¿Qué contenidos se incluyen exactamente al exportar el programa electoral?',
+      question_ca: 'Quins continguts s\'inclouen exactament en exportar el programa electoral?',
+      answer_es: 'El documento final exportado incluye la portada oficial con lema y logotipo local, el índice general, la presentación política de la candidatura, las 12 áreas temáticas con sus introducciones y propuestas aprobadas (incluidas y adaptadas), el texto de cierre y la contraportada. Las medidas marcadas "En duda" o "Descartadas" nunca se incluyen en la exportación.',
+      answer_ca: 'El document final exportat inclou la portada oficial amb lema i logotip local, l\'índex general, la presentació política de la candidatura, les 12 àrees temàtiques amb les seves introduccions i propostes aprovades (incloses i adaptades), el text de cloenda i la contraportada. Les mesures marcades "En dubte" o "Descartades" mai no s\'inclouen a l\'exportació.',
+      category: 'export'
+    },
+    {
+      id: 'faq-privacy-1',
+      question_es: '¿Dónde se almacenan mis datos y qué información recopila la aplicación?',
+      question_ca: 'On s\'emmagatzemen les meves dades i quina informació recopila l\'aplicació?',
+      answer_es: 'Todos tus proyectos, textos, logotipos y configuraciones se almacenan exclusivamente en el disco duro local de tu equipo. La aplicación NO recopila telemetría, NO tiene cookies, NO envía estadísticas de uso ni transmite ningún dato a servidores externos.',
+      answer_ca: 'Tots els teus projectes, textos, logotips i configuracions s\'emmagatzemen exclusivament al disc dur local del teu equip. L\'aplicació NO recopila telemetria, NO té galetes, NO envia estadístiques d\'ús ni transmet cap dada a servidors externs.',
+      category: 'privacy'
+    },
+    {
+      id: 'faq-privacy-2',
+      question_es: '¿Dónde puedo consultar la Política de Privacidad oficial completa?',
+      question_ca: 'On puc consultar la Política de Privadesa oficial completa?',
+      answer_es: 'Puedes consultarla en cualquier momento, incluso sin conexión a internet, accediendo a "Configuración" > "Acerca de la aplicación" y pulsando el botón "Política de privacidad". También está disponible en el archivo PRIVACY.md de la documentación del software.',
+      answer_ca: 'Pots consultar-la en qualsevol moment, fins i tot sense connexió a internet, accedint a "Configuració" > "Quant a l\'aplicació" i prement el botó "Política de privadesa". També està disponible al fitxer PRIVACY.md de la documentació del programari.',
+      category: 'privacy'
+    },
+    {
+      id: 'faq-license-1',
+      question_es: '¿Bajo qué licencia se distribuye el programa y dónde está su código fuente?',
+      question_ca: 'Sota quina llicència es distribueix el programa i on es troba el seu codi font?',
+      answer_es: 'Constructor de Programas Municipales es software libre distribuido bajo la licencia GNU General Public License v3.0 o posterior (GPL-3.0-or-later). Su código fuente completo, auditable y descargable está publicado en GitHub: https://github.com/elftemir/constructor-programas-municipales.',
+      answer_ca: 'Constructor de Programes Municipals és programari lliure distribuït sota la llicència GNU General Public License v3.0 o posterior (GPL-3.0-or-later). El seu codi font complet, auditable i descarregable està publicat a GitHub: https://github.com/elftemir/constructor-programas-municipales.',
+      category: 'general'
     }
   ],
 
-  async render(container) {
+  async render(container, params = {}) {
     const isCa = window.i18n && window.i18n.getLang() === 'ca';
 
     container.innerHTML = `
@@ -287,6 +399,28 @@ const HelpView = {
               </button>
             </div>
           </div>
+
+          <!-- Tarjeta 5: Actualizaciones de Software y Contenidos -->
+          <div class="card" style="padding: 20px; border-left: 4px solid #0284C7; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                <span style="font-size: 20px;">🔄</span>
+                <h3 style="font-size: 15.5px; font-weight: 700; margin: 0; color: #0369A1;">
+                  ${isCa ? 'ACTUALITZACIONS' : 'ACTUALIZACIONES'}
+                </h3>
+              </div>
+              <p style="font-size: 13.5px; color: #4B5563; line-height: 1.5; margin: 0 0 14px;">
+                ${isCa
+                  ? 'Distingeix entre actualitzacions del programari i sincronització de continguts polítics. Comprova noves versions sense perdre cap projecte ni alterar treballs en marxa.'
+                  : 'Distingue entre actualizaciones de la aplicación y sincronización de contenidos políticos. Comprueba nuevas versiones sin perder ningún proyecto ni alterar trabajos en marcha.'}
+              </p>
+            </div>
+            <div>
+              <button class="btn small primary" id="btn-quick-jump-updates" style="background: #0284C7; border-color: #0284C7;">
+                ${isCa ? '→ Configurar actualitzacions' : '→ Configurar actualizaciones'}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -302,17 +436,32 @@ const HelpView = {
         </p>
 
         <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+          <button class="btn small" data-tour-section="home">
+            🏠 ${isCa ? 'Inici' : 'Inicio'}
+          </button>
+          <button class="btn small" data-tour-section="programs">
+            📁 ${isCa ? 'Els meus programes' : 'Mis programas'}
+          </button>
+          <button class="btn small" data-tour-section="source_programs">
+            📚 ${isCa ? 'Programes font' : 'Programas fuente'}
+          </button>
           <button class="btn small" data-tour-section="choose_measures">
             📋 ${isCa ? 'Àrees i mesures' : 'Áreas y medidas'}
           </button>
-          <button class="btn small" data-tour-section="basic_data">
-            🏛 ${isCa ? 'Fitxa municipal' : 'Ficha municipal'}
+          <button class="btn small" data-tour-section="general_texts">
+            📝 ${isCa ? 'Textos del programa' : 'Textos del programa'}
+          </button>
+          <button class="btn small" data-tour-section="preview">
+            👁 ${isCa ? 'Vista prèvia' : 'Vista previa'}
+          </button>
+          <button class="btn small" data-tour-section="review_export">
+            📄 ${isCa ? 'Generar documents' : 'Generar documentos'}
           </button>
           <button class="btn small" data-tour-section="ai">
             ✨ ${isCa ? 'Intel·ligència Artificial' : 'Inteligencia Artificial'}
           </button>
           <button class="btn small" data-tour-section="options">
-            ⚙ ${isCa ? 'Configuració' : 'Configuración'}
+            ⚙ ${isCa ? 'Configuració i actualitzacions' : 'Configuración y actualizaciones'}
           </button>
         </div>
       </div>
@@ -359,6 +508,10 @@ const HelpView = {
       else alert(isCa ? 'Primer obre o crea un programa municipal.' : 'Primero abre o crea un programa municipal.');
     });
 
+    container.querySelector('#btn-quick-jump-updates')?.addEventListener('click', () => {
+      App.navigateTo('opciones', { focusSection: 'updates' });
+    });
+
     // Tour general
     container.querySelector('#btn-run-interactive-tour')?.addEventListener('click', () => {
       if (window.Tutorial) window.Tutorial.startTour();
@@ -396,6 +549,14 @@ const HelpView = {
     }
 
     this.bindFaqToggles(container);
+
+    if (params.faqQuery || params.query) {
+      const q = (params.faqQuery || params.query).trim();
+      if (searchInput) {
+        searchInput.value = q;
+        searchInput.dispatchEvent(new Event('input'));
+      }
+    }
   },
 
   renderFaqList(items, isCa) {

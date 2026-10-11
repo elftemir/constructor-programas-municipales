@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { initDb } = require('./db/database');
+const { initDb, setDatabaseHandlers } = require('./db/database');
 const {
   resolveAssetPath,
   getDefaultExportDir,
@@ -203,6 +203,18 @@ function createWindow() {
 
 // App lifecycle
 app.whenReady().then(async () => {
+  setDatabaseHandlers({
+    onSaveError: () => dialog.showMessageBoxSync({
+      type: 'error', title: 'No se ha guardado / No s’ha desat',
+      message: 'No se han podido guardar los cambios. Comprueba el espacio libre y los permisos; vuelve a guardar antes de cerrar.\n\nNo s’han pogut desar els canvis. Comprova l’espai lliure i els permisos; torna a desar abans de tancar.',
+      buttons: ['Aceptar / Acceptar']
+    }),
+    confirmRestore: ({ backupPath }) => dialog.showMessageBoxSync({
+      type: 'warning', title: 'Recuperar datos / Recuperar dades',
+      message: 'La base de datos no se puede abrir. ¿Quieres restaurar la copia válida más reciente? Los cambios posteriores a esa copia no estarán disponibles.\n\nLa base de dades no es pot obrir. Vols restaurar la còpia vàlida més recent? Els canvis posteriors a la còpia no estaran disponibles.',
+      detail: backupPath, buttons: ['Restaurar', 'Cancelar / Cancel·lar'], defaultId: 1, cancelId: 1
+    }) === 0
+  });
   let dbInitialized = false;
   while (!dbInitialized) {
     try {
@@ -224,7 +236,7 @@ app.whenReady().then(async () => {
         const choice = dialog.showMessageBoxSync({
           type: 'error',
           title: 'Error al actualizar base de datos',
-          message: 'No se ha podido actualizar de forma segura la base de datos.\n\nTus datos originales se han conservado.',
+          message: 'No se ha podido abrir o actualizar de forma segura la base de datos.\n\n' + err.message,
           buttons: ['Reintentar', 'Cerrar'],
           defaultId: 0,
           cancelId: 1
@@ -538,12 +550,59 @@ function setupIpcHandlers() {
     } catch (e) {}
 
     return {
-      version: pkg.version || '3.3.0',
-      build: `Fase 3.5 (v${pkg.version || '3.3.0'})`,
+      version: pkg.version || '3.4.0',
+      build: `Fase 3.6 (v${pkg.version || '3.4.0'})`,
       appName: pkg.description || 'Constructor de Programas Municipales',
+      author: typeof pkg.author === 'object' ? pkg.author.name : (pkg.author || 'elftemir'),
+      authorEmail: typeof pkg.author === 'object' ? pkg.author.email : 'elftemir@hotmail.com',
+      license: pkg.license || 'GPL-3.0-or-later',
+      repositoryUrl: 'https://github.com/elftemir/constructor-programas-municipales',
       catalogoVersion: catVer,
       defaultExportDir: getDefaultExportDir()
     };
+  });
+
+  // Lectura segura y offline de documentos legales y avisos
+  ipcMain.handle('app:getLegalDoc', async (_, docType) => {
+    const allowedDocs = {
+      privacy: 'PRIVACY.md',
+      license: 'LICENSE',
+      thirdParty: 'THIRD_PARTY_NOTICES.md'
+    };
+    const fileName = allowedDocs[docType];
+    if (!fileName) {
+      throw new Error(`Tipo de documento legal no válido: ${docType}`);
+    }
+
+    const candidatePaths = [
+      resolveAssetPath(fileName),
+      path.join(__dirname, '..', '..', fileName),
+      path.join(process.resourcesPath || '', fileName)
+    ];
+
+    for (const c of candidatePaths) {
+      if (fs.existsSync(c)) {
+        return fs.readFileSync(c, 'utf8');
+      }
+    }
+    throw new Error(`No se pudo encontrar el archivo legal local: ${fileName}`);
+  });
+
+  // Apertura segura de URLs externas explícitamente autorizadas (lista blanca estricta)
+  ipcMain.handle('shell:openExternalUrl', async (_, targetUrl) => {
+    const ALLOWED_EXTERNAL_URLS = new Set([
+      'https://github.com/elftemir/constructor-programas-municipales',
+      'https://www.libreoffice.org/download/',
+      'mailto:elftemir@hotmail.com'
+    ]);
+
+    if (typeof targetUrl !== 'string' || !ALLOWED_EXTERNAL_URLS.has(targetUrl.trim())) {
+      console.warn('[SEC-008] shell:openExternalUrl bloqueado, URL no autorizada:', targetUrl);
+      return false;
+    }
+
+    await shell.openExternal(targetUrl.trim());
+    return true;
   });
 
   // PDF Export and Converter Detection (Fase 2)
@@ -750,22 +809,27 @@ function setupIpcHandlers() {
     return await documentStructuringService.analyzeDocument(safePath, language);
   });
 
-  ipcMain.handle('importer:runOcr', async (event, filePath, language) => {
+  ipcMain.handle('importer:runOcr', async (event, filePath, language, options = {}) => {
+    try {
     const safePath = validateImporterDocumentPath(filePath);
     return await documentStructuringService.runOcr(safePath, language, progress => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('importer:ocrProgress', progress);
       }
-    });
+    }, { workers: options?.workers === 2 ? 2 : 1, primaryLanguage: options?.primaryLanguage === 'ca' ? 'ca' : 'es' });
+    } catch (error) {
+      const codes = ['OCR_CANCELLED', 'OCR_UNAVAILABLE', 'OCR_NO_TEXT', 'OCR_BUSY', 'OCR_INVALID_LANGUAGE', 'OCR_INVALID_FILE'];
+      return { ok: false, error: { code: codes.includes(error.code || error.message) ? (error.code || error.message) : 'OCR_INVALID_FILE' } };
+    }
   });
 
-  ipcMain.handle('importer:cancelOcr', () => {
-    documentStructuringService.cancelOcr();
+  ipcMain.handle('importer:cancelOcr', async () => {
+    await documentStructuringService.cancelOcr();
     return true;
   });
 
   ipcMain.handle('importer:confirmImport', async (_, data) => {
-    return sourceProgramService.createSourceProgram(data);
+    return sourceProgramService.createImportedSource(data);
   });
 
   ipcMain.handle('importer:addLanguage', async (_, sourceId, targetLang, data) => {

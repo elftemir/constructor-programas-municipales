@@ -298,10 +298,10 @@ const App = {
         break;
       case 'configuracion':
       case 'opciones':
-        await OptionsView.render(container);
+        await OptionsView.render(container, params);
         break;
       case 'ayuda':
-        await HelpView.render(container);
+        await HelpView.render(container, params);
         break;
       default:
         await HomeView.render(container);

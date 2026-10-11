@@ -161,7 +161,7 @@ function isZipEntrySymlink(zipEntry) {
 class ContentUpdateService {
   constructor() {
     const pkg = require('../../../package.json');
-    this.appVersion = pkg.version || '3.3.0';
+    this.appVersion = pkg.version || '3.4.0';
     this.catalogUrl = OFFICIAL_CATALOG_URL;
     this.listeners = new Set();
     this.autoCheckScheduled = false;

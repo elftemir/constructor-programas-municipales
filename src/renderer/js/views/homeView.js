@@ -110,6 +110,7 @@ const HomeView = {
           <p class="subtitle">${isCa ? 'Panell de control del teu programa municipal electoral.' : 'Panel de control de tu programa municipal electoral.'}</p>
         </div>
         <div class="view-header-right" style="display: flex; gap: 10px; align-items: center;">
+          <button class="btn small btn-help-screen" id="btn-help-this-screen" title="${isCa ? 'Ajuda d\'aquesta pantalla' : 'Ayuda de esta pantalla'}" aria-label="${isCa ? 'Ajuda d\'aquesta pantalla' : 'Ayuda de esta pantalla'}"><span class="help-qmark">?</span> ${isCa ? 'Ajuda' : 'Ayuda'}</button>
           <button class="btn" id="btn-goto-fuentes" title="${isCa ? 'Gestionar programes font' : 'Gestionar programas fuente'}">
             📚 ${isCa ? 'Programes font' : 'Programas fuente'}
           </button>
@@ -310,7 +311,7 @@ const HomeView = {
 
     // Bind events in zone
     zone.querySelector('#btn-home-goto-options')?.addEventListener('click', () => {
-      if (window.App) window.App.navigateTo('opciones');
+      if (window.App) window.App.navigateTo('opciones', { focusSection: 'updates' });
     });
     zone.querySelector('#btn-home-view-content')?.addEventListener('click', () => {
       if (window.App && contentState && contentState.availableItems && contentState.availableItems.length > 0) {
@@ -320,6 +321,10 @@ const HomeView = {
   },
 
   bindEvents(container, current, lastWorkInfo) {
+    container.querySelector('#btn-help-this-screen')?.addEventListener('click', () => {
+      if (window.Tutorial) window.Tutorial.startSectionTour('home');
+    });
+
     container.querySelector('#btn-goto-fuentes')?.addEventListener('click', () => {
       App.navigateTo('fuentes');
     });

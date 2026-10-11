@@ -44,7 +44,7 @@ class StructuralClassifier {
       .trim();
   }
 
-  classifyDocument(blocks) {
+  classifyDocument(blocks, options = {}) {
     if (!blocks || blocks.length === 0) {
       const empty = [];
       empty.areas = [];
@@ -63,7 +63,7 @@ class StructuralClassifier {
     const segmentation = this.segmentDocument(blocks, tocInfo, profile);
 
     // 4. Validación contextual de Áreas y asignación de contenido interno
-    const validatedAreas = this.validateAndBuildAreas(segmentation, tocInfo, profile);
+    const validatedAreas = this.validateAndBuildAreas(segmentation, tocInfo, profile, options);
 
     // 5. Estadísticas de coherencia y calidad
     const stats = this.computeDocumentStats(validatedAreas, profile);
@@ -307,7 +307,7 @@ class StructuralClassifier {
     return false;
   }
 
-  validateAndBuildAreas(segmentation, tocInfo, profile) {
+  validateAndBuildAreas(segmentation, tocInfo, profile, options = {}) {
     const validatedAreas = [];
     const candidateSections = segmentation.candidateSections;
 
@@ -354,7 +354,7 @@ class StructuralClassifier {
     }
 
     // Si el documento era completamente plano y no detectó áreas estructuradas:
-    if (validatedAreas.length === 0 && candidateSections.length > 0) {
+    if (options.allowFallbackArea !== false && validatedAreas.length === 0 && candidateSections.length > 0) {
       const allBlocks = [];
       candidateSections.forEach(s => {
         allBlocks.push(s.headerBlock, ...s.blocks);

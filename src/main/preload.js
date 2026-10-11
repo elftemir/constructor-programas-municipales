@@ -60,6 +60,8 @@ contextBridge.exposeInMainWorld('api', {
   selectLogoFile: (codigoIne) => ipcRenderer.invoke('dialog:selectLogo', codigoIne),
   selectExportDir: () => ipcRenderer.invoke('dialog:selectExportDir'),
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+  getLegalDoc: (docType) => ipcRenderer.invoke('app:getLegalDoc', docType),
+  openExternalUrl: (url) => ipcRenderer.invoke('shell:openExternalUrl', url),
   getLastOpenedProjectId: () => ipcRenderer.invoke('config:getLastProjectId'),
   setLastOpenedProjectId: (id) => ipcRenderer.invoke('config:setLastProjectId', id),
 
@@ -117,7 +119,7 @@ contextBridge.exposeInMainWorld('api', {
   // Importador
   importerSelectFile: () => ipcRenderer.invoke('importer:selectFile'),
   importerAnalyzeDocument: (filePath, language) => ipcRenderer.invoke('importer:analyzeDocument', filePath, language),
-  importerRunOcr: (filePath, language) => ipcRenderer.invoke('importer:runOcr', filePath, language),
+  importerRunOcr: (filePath, language, options) => ipcRenderer.invoke('importer:runOcr', filePath, language, options),
   importerCancelOcr: () => ipcRenderer.invoke('importer:cancelOcr'),
   importerConfirmImport: (data) => ipcRenderer.invoke('importer:confirmImport', data),
   importerAddLanguage: (sourceId, targetLang, data) => ipcRenderer.invoke('importer:addLanguage', sourceId, targetLang, data),

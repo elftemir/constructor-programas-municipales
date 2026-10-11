@@ -47,7 +47,7 @@ const ReviewExportView = {
 
     // Get export directory & PDF converter status
     const baseExportDir = await window.api.getExportDir();
-    const converters = window.api.detectPdfConverters ? await window.api.detectPdfConverters() : { canConvert: false };
+    const converters = window.api.detectPdfConverters ? await window.api.detectPdfConverters().catch(() => ({ canConvert: false })) : { canConvert: false };
     const munSlug = (project.municipio || 'Municipal')
       .replace(/['’]/g, '_')
       .replace(/\s+/g, '_')
@@ -283,7 +283,7 @@ const ReviewExportView = {
                   </div>
                 </label>
                 <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 13.5px; cursor: pointer;">
-                  <input type="radio" name="export-format" value="pdf" style="margin-top: 3px; accent-color: var(--action-primary);" />
+                  <input type="radio" name="export-format" value="pdf" ${converters.canConvert ? '' : 'disabled'} style="margin-top: 3px; accent-color: var(--action-primary);" />
                   <div>
                     <div style="font-weight: 700;">PDF (.pdf)</div>
                     <div class="muted" style="font-size: 12px;">${isCa ? 'Document final llest per imprimir i distribuir' : 'Documento final listo para imprimir y distribuir'}</div>
@@ -296,7 +296,8 @@ const ReviewExportView = {
                   ? (isCa ? '✓ Microsoft Word detectat per a conversió nativa a PDF.' : '✓ Microsoft Word detectado para conversión nativa a PDF.')
                   : (converters.libreOfficeAvailable
                     ? (isCa ? '✓ LibreOffice Writer detectat per a conversió a PDF.' : '✓ LibreOffice Writer detectado para conversión a PDF.')
-                    : (isCa ? 'ℹ Sense conversor automàtic a PDF (es requereix Word o LibreOffice). El DOCX es generarà correctament.' : 'ℹ Sin conversor automático a PDF (se requiere Word o LibreOffice). El DOCX se generará correctamente.'))}
+                    : (isCa ? 'Per exportar a PDF cal Microsoft Word o LibreOffice (gratuït). Pots continuar exportant a DOCX. Després d’instal·lar un conversor, torna a aquesta pantalla.' : 'Para exportar a PDF hace falta Microsoft Word o LibreOffice (gratuito). Puedes seguir exportando a DOCX. Después de instalar un conversor, vuelve a esta pantalla.'))}
+                ${!converters.canConvert ? `<button class="btn small" id="btn-download-libreoffice" style="margin-top: 8px;">${isCa ? 'Descarregar LibreOffice' : 'Descargar LibreOffice'}</button>` : ''}
               </div>
             </div>
 
@@ -385,6 +386,9 @@ const ReviewExportView = {
   },
 
   bindEvents(container, project, currentBaseDir) {
+    container.querySelector('#btn-download-libreoffice')?.addEventListener('click', async () => {
+      await window.api.openExternalUrl('https://www.libreoffice.org/download/');
+    });
     const btnHelpScreen = container.querySelector('#btn-help-this-screen');
     if (btnHelpScreen) {
       btnHelpScreen.addEventListener('click', () => {

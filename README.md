@@ -4,75 +4,76 @@ Aplicación de escritorio para la elaboración, adaptación y gestión de progra
 
 ## Estado del proyecto
 
-Proyecto en desarrollo.
+Versión actual del código: **3.6.1**.
 
-Actualmente disponible para **Windows x64**.
+Disponible para **Windows 10/11 x64**.
 
 ## Características principales
 
 - Gestión de Programas fuente.
 - Importación de documentos PDF y DOCX.
 - Programas Marco en uno o varios idiomas oficiales.
-- Adaptación y selección de medidas para programas municipales.
+- Adaptación de medidas a programas municipales.
 - Gestión de contenidos en Castellano y Català.
 - Asistencia mediante inteligencia artificial local.
 - Generación de documentos DOCX y PDF.
 - Actualización independiente de la aplicación y de los Programas Marco.
-- Gestión local de los proyectos y de sus datos.
+- Funcionamiento local: los proyectos y los textos procesados por la IA permanecen en el ordenador del usuario.
 
-## Inteligencia artificial local
+## Descargar
 
-Constructor de Programas Municipales incorpora funciones de asistencia mediante inteligencia artificial ejecutada localmente en el ordenador del usuario.
+El instalador se adjunta en [Releases del repositorio del código](https://github.com/elftemir/constructor-programas-municipales/releases). Descarga el EXE de la versión publicada y, si quieres comprobarlo, su SHA256.txt. No necesitas descargar ni compilar el código para usar el programa.
 
-La inferencia de IA se realiza de forma local y los textos de los proyectos procesados por la IA no se envían a servicios externos de inteligencia artificial.
+El actualizador automático utiliza las Releases del [repositorio de actualizaciones](https://github.com/elftemir/constructor-programas-municipales-updates/releases). Ambos destinos deben recibir archivos de la misma compilación.
 
-Los modelos de IA y determinados componentes necesarios para su ejecución pueden distribuirse o descargarse separadamente y conservar sus propias licencias.
+## Requisitos
+
+- Windows 10 u 11 de 64 bits (x64).
+- La exportación DOCX funciona sin Word o LibreOffice; PDF requiere uno de esos conversores instalados. Si falta, la aplicación muestra una explicación y el enlace oficial de LibreOffice.
+- La IA es opcional y local; los requisitos de memoria dependen del modelo elegido.
 
 ## Código fuente
 
-Este es el repositorio oficial del código fuente de **Constructor de Programas Municipales**.
+Este repositorio contiene el código fuente de **Constructor de Programas Municipales**.
 
-El código fuente del programa se distribuye como software libre bajo la licencia **GNU GPL-3.0-or-later**.
+Los instaladores y archivos de actualización de la aplicación se distribuyen por separado.
 
-Los instaladores y archivos utilizados por el sistema de actualización de la aplicación se gestionan mediante un repositorio independiente.
+Los Programas Marco y demás contenidos descargables se gestionan también de forma independiente y pueden estar sujetos a sus propias condiciones de uso o licencia.
 
-Los Programas Marco y otros contenidos descargables se gestionan también de forma independiente del código fuente.
+## Privacidad
 
-## Repositorios relacionados
+Constructor de Programas Municipales está diseñado para trabajar principalmente de forma local.
 
-- Código fuente: https://github.com/elftemir/constructor-programas-municipales
-- Actualizaciones de la aplicación: https://github.com/elftemir/constructor-programas-municipales-updates
-- Programas Marco y contenidos: https://github.com/elftemir/constructor-programas-municipales-content
+Los proyectos y los textos procesados por la IA permanecen en el ordenador del usuario.
 
-## Software, contenidos y derechos de terceros
+La aplicación no incorpora telemetría propia ni utiliza los contenidos de los proyectos para entrenar modelos de inteligencia artificial.
 
-La licencia **GNU GPL-3.0-or-later** se aplica al software y al código fuente de **Constructor de Programas Municipales**, así como a los recursos propios del proyecto que se indiquen expresamente.
+Consulta la política completa:
 
-Los Programas Marco, textos programáticos, documentos políticos, datos procedentes de fuentes externas, logotipos, marcas, identidades corporativas y otros materiales de terceros pueden estar sujetos a sus propias licencias, condiciones de reutilización, derechos de autor o derechos de propiedad industrial.
+[Política de privacidad](PRIVACY.md)
 
-La inclusión, utilización o compatibilidad de esos contenidos con la aplicación no implica que queden relicenciados bajo la GNU GPL.
-
-La licencia GPL del software tampoco concede derechos sobre marcas, logotipos o identidades corporativas pertenecientes a terceros.
-
-## Autor y contacto
-
-**Autor y mantenedor:** elftemir
-
-Copyright © 2026 **elftemir**
-
-Para consultas, propuestas, incidencias o colaboración:
-
-- GitHub Issues: utiliza la sección de incidencias de este repositorio.
-- Correo electrónico: **elftemir@hotmail.com**
-
-## Licencia
+## Licencia del Software
 
 **Constructor de Programas Municipales** es software libre.
 
+Copyright © 2026 **elftemir**
+
 Este programa puede redistribuirse y/o modificarse bajo los términos de la **GNU General Public License**, publicada por la Free Software Foundation, **versión 3 de la licencia o, a elección del usuario, cualquier versión posterior**.
 
-**SPDX-License-Identifier: GPL-3.0-or-later**
-
-El programa se distribuye con la esperanza de que resulte útil, pero **sin ninguna garantía**, ni siquiera la garantía implícita de comerciabilidad o adecuación para un propósito particular, en los términos establecidos por la GNU General Public License.
+SPDX-License-Identifier: GPL-3.0-or-later
 
 Consulta el archivo [LICENSE](LICENSE) para ver el texto completo de la GNU General Public License v3.
+
+## Alcance de la Licencia y Derechos de Terceros
+
+- La licencia **GNU GPL v3 o posterior** cubre estrictamente el **código fuente y la arquitectura de software** del proyecto.
+- Los **Programas Marco**, textos programáticos, documentos políticos, modelos editoriales, logotipos, emblemas y recursos gráficos de organizaciones políticas o administraciones públicas pueden estar sujetos a derechos de autor, derechos morales o normativas de propiedad industrial/marcas independientes de este software. La licencia GPL del código fuente no otorga derechos sobre marcas registradas, identidades corporativas ni contenidos políticos de terceros.
+
+## Autor y Contacto
+
+- **Autor**: elftemir
+- **Contacto**: elftemir@hotmail.com
+
+## Desarrollo y colaboración
+
+Consulta [CONTRIBUTING.md](CONTRIBUTING.md), [SOURCE_BUILD.md](SOURCE_BUILD.md) y [CHANGELOG.md](CHANGELOG.md). Para preparar una carpeta local de publicación: `npm run preparar-publicacion`. Este comando no sube nada a GitHub.

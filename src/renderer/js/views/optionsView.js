@@ -4,7 +4,7 @@
  */
 
 const OptionsView = {
-  async render(container) {
+  async render(container, params = {}) {
     const ver = await window.api.getAppVersion();
     const exportDir = await window.api.getExportDir();
     let activeSource = null;
@@ -75,11 +75,16 @@ const OptionsView = {
             </div>
           </div>
 
-          <!-- Información de la Aplicación -->
+          <!-- Información de la Aplicación / Acerca de -->
           <div class="card" style="padding: 24px;">
-            <h2 class="section-title" style="font-size: 18px; margin-bottom: 16px;">
-              ${isCa ? 'Quant a l\'aplicació' : 'Acerca de la aplicación'}
-            </h2>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+              <h2 class="section-title" style="font-size: 18px; margin: 0;">
+                ${isCa ? 'Quant a l\'aplicació' : 'Acerca de la aplicación'}
+              </h2>
+              <span class="badge" style="background: #f3e8ff; color: #6b21a8; font-weight: 700; font-size: 11px;">
+                GPL-3.0-or-later
+              </span>
+            </div>
 
             <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13.5px;">
               <div>
@@ -88,29 +93,53 @@ const OptionsView = {
               </div>
               <div>
                 <span class="muted">${isCa ? 'Versió del programari:' : 'Versión del software:'}</span>
-                <b>v${escapeHtml(ver.version || '3.1.3')} (${isCa ? 'Fase 3' : 'Fase 3'})</b>
+                <b>v${escapeHtml(ver.version || '3.4.0')}</b>
               </div>
               <div>
-                <span class="muted">${isCa ? 'Programa font actiu:' : 'Programa fuente activo:'}</span>
-                <b>${escapeHtml(activeSource?.nombre || (isCa ? 'Cap programa font instal·lat' : 'Ningún programa fuente instalado'))}</b>
-                ${activeSource ? `<span class="muted" style="font-size: 12px;">(${activeSource?.total_areas || 0} ${isCa ? 'àrees' : 'áreas'} · ${activeSource?.total_medidas || 0} ${isCa ? 'mesures' : 'medidas'})</span>` : ''}
+                <span class="muted">${isCa ? 'Autor i mantenidor:' : 'Autor y mantenedor:'}</span>
+                <b>${escapeHtml(ver.author || 'elftemir')}</b>
               </div>
               <div>
-                <span class="muted">${isCa ? 'Catàleg de referència històric:' : 'Catálogo de referencia histórico:'}</span>
-                <span style="font-size: 13px; color: var(--text-secondary);">Catàleg bilingüe 1.4.1 (${isCa ? 'versió estàtica històrica de la Fase 1' : 'versión estática histórica de la Fase 1'})</span>
+                <span class="muted">${isCa ? 'Contacte:' : 'Contacto:'}</span>
+                <span style="display: inline-flex; align-items: center; gap: 6px;">
+                  <b>${escapeHtml(ver.authorEmail || 'elftemir@hotmail.com')}</b>
+                  <button class="btn small link" id="btn-about-contact-mail" style="padding: 0 4px; font-size: 12px; text-decoration: underline;" title="${isCa ? 'Obrir client de correu' : 'Abrir cliente de correo'}">${isCa ? 'Enviar correu' : 'Enviar correo'}</button>
+                </span>
               </div>
               <div>
-                <span class="muted">${isCa ? 'Base de dades municipal:' : 'Base de datos municipal:'}</span>
-                <b>947 ${isCa ? 'municipis de Catalunya (Idescat / INE)' : 'municipios de Cataluña (Idescat / INE)'}</b>
+                <span class="muted">${isCa ? 'Llicència:' : 'Licencia:'}</span>
+                <b>GNU GPL-3.0-or-later</b> <span class="muted">(${isCa ? 'Programari lliure' : 'Software libre'})</span>
               </div>
               <div>
-                <span class="muted">${isCa ? 'Arquitectura i entorn:' : 'Arquitectura y entorno:'}</span>
-                <span>Windows x64 · 100% ${isCa ? 'Local i fora de línia' : 'Local y fuera de línea'}</span>
+                <span class="muted">${isCa ? 'Codi font:' : 'Código fuente:'}</span>
+                <div style="margin-top: 4px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <code style="font-size: 12px; background: var(--surface-muted); padding: 4px 6px; border-radius: 4px;">https://github.com/elftemir/constructor-programas-municipales</code>
+                  <button class="btn small link" id="btn-about-open-repo" style="padding: 2px 6px; font-size: 12px; text-decoration: underline;">${isCa ? 'Obrir al navegador' : 'Abrir en navegador'}</button>
+                  <button class="btn small" id="btn-about-copy-repo" style="padding: 2px 8px; font-size: 11px;">${isCa ? 'Copiar enllaç' : 'Copiar enlace'}</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Accesos a documentación legal y privacidad sin internet -->
+            <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-divider);">
+              <div style="font-weight: 700; font-size: 13px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 10px;">
+                ${isCa ? 'DOCUMENTACIÓ I TRANSPARÈNCIA' : 'DOCUMENTACIÓN Y TRANSPARENCIA'}
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="btn small primary" id="btn-about-open-privacy" style="background: #15803d; border-color: #166534;">
+                  🛡️ ${isCa ? 'Política de privadesa' : 'Política de privacidad'}
+                </button>
+                <button class="btn small" id="btn-about-open-license">
+                  ⚖️ ${isCa ? 'Llicència GPL' : 'Licencia GPL'}
+                </button>
+                <button class="btn small" id="btn-about-open-third-party">
+                  📜 ${isCa ? 'Llicències de tercers' : 'Licencias de terceros'}
+                </button>
               </div>
             </div>
 
             <div class="notice info" style="margin-top: 18px; font-size: 12.5px;">
-              <b>${isCa ? 'Garantia de privadesa:' : 'Garantía de privacidad:'}</b>
+              <b>${isCa ? 'Privadesa local:' : 'Privacidad local:'}</b>
               ${isCa
                 ? ' Tots els teus programes, adaptacions i dades municipals es guarden de forma estrictament local al teu ordinador.'
                 : ' Todos tus programas, adaptaciones y datos municipales se guardan de forma estrictamente local en tu ordenador.'}
@@ -152,7 +181,7 @@ const OptionsView = {
           </div>
 
           <!-- Actualizaciones unificadas (Fase 3.4A + 3.4B) -->
-          <div class="card" style="padding: 24px;">
+          <div class="card" id="card-options-updates" style="padding: 24px; scroll-margin-top: 20px;">
             <h2 class="section-title" style="font-size: 18px; margin-bottom: 8px;">
               ${isCa ? 'Actualitzacions' : 'Actualizaciones'}
             </h2>
@@ -170,7 +199,7 @@ const OptionsView = {
                 </div>
                 <div style="font-size: 13px;">
                   <span class="muted">${isCa ? 'Versió instal·lada:' : 'Versión instalada:'}</span>
-                  <b>v${escapeHtml(ver.version || '3.2.2')}</b>
+                  <b>v${escapeHtml(ver.version || '3.4.0')}</b>
                 </div>
               </div>
               <div id="options-updater-status-box"></div>
@@ -198,6 +227,22 @@ const OptionsView = {
     `;
 
     this.bindEvents(container);
+
+    if (params && params.focusSection === 'updates') {
+      setTimeout(() => {
+        const upEl = document.getElementById('card-options-updates');
+        if (upEl) {
+          upEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          upEl.style.transition = 'box-shadow 0.3s ease, border-color 0.3s ease';
+          upEl.style.boxShadow = '0 0 0 3px rgba(124, 58, 237, 0.4)';
+          upEl.style.borderColor = '#7c3aed';
+          setTimeout(() => {
+            upEl.style.boxShadow = '';
+            upEl.style.borderColor = '';
+          }, 2400);
+        }
+      }, 80);
+    }
 
     // Cargar estado inicial de app updater
     if (window.api && typeof window.api.getUpdateStatus === 'function') {
@@ -563,6 +608,206 @@ const OptionsView = {
         } finally {
           btnCheckAll.disabled = false;
         }
+      });
+    }
+
+    // Acciones de Acerca de y Documentación legal
+    const btnPrivacy = container.querySelector('#btn-about-open-privacy');
+    if (btnPrivacy) {
+      btnPrivacy.addEventListener('click', () => {
+        const isCa = window.i18n && window.i18n.getLang() === 'ca';
+        this.showLegalDocModal('privacy', isCa ? 'Política de privadesa' : 'Política de privacidad', isCa);
+      });
+    }
+
+    const btnLicense = container.querySelector('#btn-about-open-license');
+    if (btnLicense) {
+      btnLicense.addEventListener('click', () => {
+        const isCa = window.i18n && window.i18n.getLang() === 'ca';
+        this.showLegalDocModal('license', isCa ? 'Llicència GNU General Public License v3' : 'Licencia GNU General Public License v3', isCa);
+      });
+    }
+
+    const btnThirdParty = container.querySelector('#btn-about-open-third-party');
+    if (btnThirdParty) {
+      btnThirdParty.addEventListener('click', () => {
+        const isCa = window.i18n && window.i18n.getLang() === 'ca';
+        this.showLegalDocModal('thirdParty', isCa ? 'Llicències i crèdits de tercers' : 'Licencias y créditos de terceros', isCa);
+      });
+    }
+
+    const btnRepo = container.querySelector('#btn-about-open-repo');
+    if (btnRepo) {
+      btnRepo.addEventListener('click', async () => {
+        if (window.api?.openExternalUrl) {
+          await window.api.openExternalUrl('https://github.com/elftemir/constructor-programas-municipales');
+        }
+      });
+    }
+
+    const btnCopyRepo = container.querySelector('#btn-about-copy-repo');
+    if (btnCopyRepo) {
+      btnCopyRepo.addEventListener('click', async () => {
+        const isCa = window.i18n && window.i18n.getLang() === 'ca';
+        try {
+          await navigator.clipboard.writeText('https://github.com/elftemir/constructor-programas-municipales');
+          const oldTxt = btnCopyRepo.textContent;
+          btnCopyRepo.textContent = isCa ? '✓ Copiat!' : '✓ ¡Copiado!';
+          setTimeout(() => { btnCopyRepo.textContent = oldTxt; }, 2000);
+        } catch (e) {
+          alert('https://github.com/elftemir/constructor-programas-municipales');
+        }
+      });
+    }
+
+    const btnMail = container.querySelector('#btn-about-contact-mail');
+    if (btnMail) {
+      btnMail.addEventListener('click', async () => {
+        if (window.api?.openExternalUrl) {
+          await window.api.openExternalUrl('mailto:elftemir@hotmail.com');
+        }
+      });
+    }
+  },
+
+  renderMarkdownToHtml(mdText) {
+    if (!mdText) return '';
+    const lines = mdText.split('\n');
+    let html = '';
+    let inList = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].trim();
+
+      if (!line) {
+        if (inList) {
+          html += '</ul>';
+          inList = false;
+        }
+        continue;
+      }
+
+      // Headers
+      if (line.startsWith('### ')) {
+        if (inList) { html += '</ul>'; inList = false; }
+        const txt = escapeHtml(line.slice(4));
+        html += `<h4 style="font-size: 14.5px; font-weight: 700; margin: 16px 0 6px; color: #1e1b4b;">${txt}</h4>`;
+        continue;
+      }
+      if (line.startsWith('## ')) {
+        if (inList) { html += '</ul>'; inList = false; }
+        const txt = escapeHtml(line.slice(3));
+        html += `<h3 style="font-size: 16px; font-weight: 800; margin: 20px 0 8px; color: #1e1b4b; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">${txt}</h3>`;
+        continue;
+      }
+      if (line.startsWith('# ')) {
+        if (inList) { html += '</ul>'; inList = false; }
+        const txt = escapeHtml(line.slice(2));
+        html += `<h2 style="font-size: 18px; font-weight: 800; margin: 10px 0 10px; color: #0f172a;">${txt}</h2>`;
+        continue;
+      }
+
+      // Unordered lists
+      if (line.startsWith('- ') || line.startsWith('* ')) {
+        if (!inList) {
+          html += '<ul style="margin: 6px 0 10px 20px; padding: 0; line-height: 1.6;">';
+          inList = true;
+        }
+        let itemTxt = escapeHtml(line.slice(2));
+        itemTxt = itemTxt.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+        itemTxt = itemTxt.replace(/\*([^*]+)\*/g, '<i>$1</i>');
+        itemTxt = itemTxt.replace(/`([^`]+)`/g, '<code style="background: #f1f5f9; padding: 2px 4px; border-radius: 4px;">$1</code>');
+        html += `<li style="margin-bottom: 4px; color: #334155;">${itemTxt}</li>`;
+        continue;
+      }
+
+      if (inList) {
+        html += '</ul>';
+        inList = false;
+      }
+
+      // Paragraph formatting
+      let pTxt = escapeHtml(line);
+      pTxt = pTxt.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+      pTxt = pTxt.replace(/\*([^*]+)\*/g, '<i>$1</i>');
+      pTxt = pTxt.replace(/`([^`]+)`/g, '<code style="background: #f1f5f9; padding: 2px 4px; border-radius: 4px;">$1</code>');
+      html += `<p style="margin: 0 0 10px; line-height: 1.65; color: #334155;">${pTxt}</p>`;
+    }
+
+    if (inList) {
+      html += '</ul>';
+    }
+    return html;
+  },
+
+  async showLegalDocModal(docType, modalTitle, isCa) {
+    const modalContainer = document.querySelector('#modal-container') || document.body;
+    let contentText = '';
+    try {
+      if (window.api && typeof window.api.getLegalDoc === 'function') {
+        contentText = await window.api.getLegalDoc(docType);
+      } else {
+        contentText = 'API de lectura legal no disponible.';
+      }
+    } catch (err) {
+      contentText = isCa
+        ? `Error en carregar el document local: ${err.message}`
+        : `Error al cargar el documento local: ${err.message}`;
+    }
+
+    let renderedBody = '';
+    if (docType === 'license') {
+      renderedBody = `<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12.5px; line-height: 1.6; color: #1e293b; white-space: pre-wrap; word-break: break-word; user-select: text;">${escapeHtml(contentText)}</div>`;
+    } else {
+      renderedBody = `<div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px; font-size: 13.5px; line-height: 1.65; color: #1e293b; user-select: text;">${this.renderMarkdownToHtml(contentText)}</div>`;
+    }
+
+    modalContainer.innerHTML = `
+      <div class="modal-overlay" style="z-index: 10000; display: flex; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(2px);">
+        <div class="modal-dialog" style="max-width: 860px; width: 92%; max-height: 88vh; background: #ffffff; border-radius: 12px; display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border: 1px solid var(--border-subtle); overflow: hidden;">
+          <div class="modal-header" style="padding: 16px 24px; border-bottom: 1px solid var(--border-divider); display: flex; align-items: center; justify-content: space-between; background: var(--surface-app);">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 20px;">${docType === 'privacy' ? '🛡️' : (docType === 'license' ? '⚖️' : '📜')}</span>
+              <h2 style="font-size: 17px; font-weight: 800; margin: 0; color: #1e1b4b;">
+                ${escapeHtml(modalTitle)}
+              </h2>
+            </div>
+            <button class="btn small" id="btn-modal-legal-close-x" style="padding: 4px 10px; font-size: 14px; font-weight: 700; border-radius: 6px;">✕</button>
+          </div>
+          <div class="modal-body" style="padding: 24px; overflow-y: auto; flex: 1; background: #f8fafc;">
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; padding: 8px 12px; background: #ffffff; border-radius: 6px; border: 1px solid var(--border-subtle);">
+              ℹ️ ${isCa
+                ? 'Document oficial emmagatzemat localment a l\'aplicació. Accessible sense connexió a Internet.'
+                : 'Documento oficial almacenado localmente en la aplicación. Accesible sin conexión a Internet.'}
+            </div>
+            ${renderedBody}
+          </div>
+          <div class="modal-footer" style="padding: 14px 24px; border-top: 1px solid var(--border-divider); display: flex; align-items: center; justify-content: space-between; background: var(--surface-app);">
+            <span class="muted" style="font-size: 12px;">Constructor de Programas Municipales · GNU GPL-3.0-or-later</span>
+            <button class="btn primary" id="btn-modal-legal-close-btn" style="min-width: 100px;">
+              ${isCa ? 'Tancar' : 'Cerrar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    modalContainer.style.display = 'block';
+
+    const closeModal = () => {
+      modalContainer.style.display = 'none';
+      modalContainer.innerHTML = '';
+    };
+
+    const btnX = modalContainer.querySelector('#btn-modal-legal-close-x');
+    if (btnX) btnX.addEventListener('click', closeModal);
+
+    const btnClose = modalContainer.querySelector('#btn-modal-legal-close-btn');
+    if (btnClose) btnClose.addEventListener('click', closeModal);
+
+    const overlay = modalContainer.querySelector('.modal-overlay');
+    if (overlay) {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeModal();
       });
     }
   }

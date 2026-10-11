@@ -575,7 +575,16 @@ const GeneralTextsView = {
     const btnHelpScreen = container.querySelector('#btn-help-this-screen');
     if (btnHelpScreen) {
       btnHelpScreen.addEventListener('click', () => {
-        if (window.Tutorial) window.Tutorial.startSectionTour('general_texts');
+        if (window.Tutorial) {
+          const sub = this.currentSubSection || 'presentacion';
+          if (sub === 'cierre') {
+            window.Tutorial.startSectionTour('general_texts_cierre');
+          } else if (sub === 'introducciones') {
+            window.Tutorial.startSectionTour('general_texts_intros');
+          } else {
+            window.Tutorial.startSectionTour('general_texts_presentacion');
+          }
+        }
       });
     }
 

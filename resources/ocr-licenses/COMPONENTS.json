@@ -1,0 +1,557 @@
+[
+  {
+    "name": "aho-corasick",
+    "revision": "1.1.4",
+    "license": "Unlicense OR MIT"
+  },
+  {
+    "name": "anyhow",
+    "revision": "1.0.104",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "base64-simd",
+    "revision": "0.8.0",
+    "license": "MIT"
+  },
+  {
+    "name": "bitflags",
+    "revision": "2.13.1",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "bumpalo",
+    "revision": "3.20.3",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "bytemuck",
+    "revision": "1.25.2",
+    "license": "Zlib OR Apache-2.0 OR MIT"
+  },
+  {
+    "name": "cc",
+    "revision": "1.4.0",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "cfb",
+    "revision": "0.14.0",
+    "license": "MIT"
+  },
+  {
+    "name": "cfg-if",
+    "revision": "1.0.4",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "cmake",
+    "revision": "0.1.58",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "color_quant",
+    "revision": "1.1.0",
+    "license": "MIT"
+  },
+  {
+    "name": "convert_case",
+    "revision": "0.11.0",
+    "license": "MIT"
+  },
+  {
+    "name": "cssparser",
+    "revision": "0.38.0",
+    "license": "MPL-2.0",
+    "source": "https://static.crates.io/crates/cssparser/cssparser-0.38.0.crate",
+    "local": "sources/cssparser-0.38.0.crate",
+    "sha256": "11119743ad110e8c1bdccd930d7f5c30c99e5fc76a7b63ec9807e84eef0c5f59"
+  },
+  {
+    "name": "cssparser-color",
+    "revision": "0.6.0",
+    "license": "MPL-2.0",
+    "source": "https://static.crates.io/crates/cssparser-color/cssparser-color-0.6.0.crate",
+    "local": "sources/cssparser-color-0.6.0.crate",
+    "sha256": "cc0e59e8bcc238f0f9b9f29f4d649e5c192dbf277999d0c23d1a312af3fb7a3e"
+  },
+  {
+    "name": "cssparser-macros",
+    "revision": "0.7.0",
+    "license": "MPL-2.0",
+    "source": "https://static.crates.io/crates/cssparser-macros/cssparser-macros-0.7.0.crate",
+    "local": "sources/cssparser-macros-0.7.0.crate",
+    "sha256": "10a2a99df6e410a8ff4245aa2006499ea662245f967cc7c0a38c83ef8eb44dbf"
+  },
+  {
+    "name": "ctor",
+    "revision": "1.0.11",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "dtoa",
+    "revision": "1.0.11",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "dtoa-short",
+    "revision": "0.3.5",
+    "license": "MPL-2.0",
+    "source": "https://static.crates.io/crates/dtoa-short/dtoa-short-0.3.5.crate",
+    "local": "sources/dtoa-short-0.3.5.crate",
+    "sha256": "cd1511a7b6a56299bd043a9c167a6d2bfb37bf84a6dfceaba651168adfb43c87"
+  },
+  {
+    "name": "fastrand",
+    "revision": "2.5.0",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "find-msvc-tools",
+    "revision": "0.1.9",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "fnv",
+    "revision": "1.0.7",
+    "license": "Apache-2.0 / MIT"
+  },
+  {
+    "name": "futures",
+    "revision": "0.3.33",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "futures-channel",
+    "revision": "0.3.33",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "futures-core",
+    "revision": "0.3.33",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "futures-executor",
+    "revision": "0.3.33",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "futures-io",
+    "revision": "0.3.33",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "futures-macro",
+    "revision": "0.3.33",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "futures-sink",
+    "revision": "0.3.33",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "futures-task",
+    "revision": "0.3.33",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "futures-util",
+    "revision": "0.3.33",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "gif",
+    "revision": "0.14.2",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "hermit-abi",
+    "revision": "0.5.2",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "imagesize",
+    "revision": "0.15.0",
+    "license": "MIT"
+  },
+  {
+    "name": "infer",
+    "revision": "0.22.0",
+    "license": "MIT"
+  },
+  {
+    "name": "itoa",
+    "revision": "1.0.18",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "js-sys",
+    "revision": "0.3.103",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "libaom-sys",
+    "revision": "0.17.2+libaom.3.11.0",
+    "license": "BSD-2-Clause"
+  },
+  {
+    "name": "libavif",
+    "revision": "0.14.0",
+    "license": "BSD-2-Clause"
+  },
+  {
+    "name": "libavif-sys",
+    "revision": "0.17.0+libavif.1.0.4",
+    "license": "BSD-2-Clause"
+  },
+  {
+    "name": "libc",
+    "revision": "0.2.189",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "libloading",
+    "revision": "0.9.0",
+    "license": "ISC"
+  },
+  {
+    "name": "libmimalloc-sys2",
+    "revision": "0.1.60",
+    "license": "MIT"
+  },
+  {
+    "name": "memchr",
+    "revision": "2.8.3",
+    "license": "Unlicense OR MIT"
+  },
+  {
+    "name": "mimalloc-safe",
+    "revision": "0.1.64",
+    "license": "MIT"
+  },
+  {
+    "name": "napi",
+    "revision": "3.12.1",
+    "license": "MIT"
+  },
+  {
+    "name": "napi-build",
+    "revision": "2.4.1",
+    "license": "MIT"
+  },
+  {
+    "name": "napi-derive",
+    "revision": "3.6.3",
+    "license": "MIT"
+  },
+  {
+    "name": "napi-derive-backend",
+    "revision": "6.1.2",
+    "license": "MIT"
+  },
+  {
+    "name": "napi-sys",
+    "revision": "3.3.0",
+    "license": "MIT"
+  },
+  {
+    "name": "nohash-hasher",
+    "revision": "0.2.0",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "nom",
+    "revision": "8.0.0",
+    "license": "MIT"
+  },
+  {
+    "name": "num_cpus",
+    "revision": "1.17.0",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "once_cell",
+    "revision": "1.21.4",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "outref",
+    "revision": "0.5.2",
+    "license": "MIT"
+  },
+  {
+    "name": "phf",
+    "revision": "0.14.0",
+    "license": "MIT"
+  },
+  {
+    "name": "phf_generator",
+    "revision": "0.14.0",
+    "license": "MIT"
+  },
+  {
+    "name": "phf_macros",
+    "revision": "0.14.0",
+    "license": "MIT"
+  },
+  {
+    "name": "phf_shared",
+    "revision": "0.14.0",
+    "license": "MIT"
+  },
+  {
+    "name": "pin-project-lite",
+    "revision": "0.2.17",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "proc-macro2",
+    "revision": "1.0.107",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "quote",
+    "revision": "1.0.47",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "regex",
+    "revision": "1.13.1",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "regex-automata",
+    "revision": "0.4.16",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "regex-syntax",
+    "revision": "0.8.11",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "rgb",
+    "revision": "0.8.53",
+    "license": "MIT"
+  },
+  {
+    "name": "rustc-hash",
+    "revision": "2.1.3",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "rustversion",
+    "revision": "1.0.23",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "serde",
+    "revision": "1.0.229",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "serde_core",
+    "revision": "1.0.229",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "serde_derive",
+    "revision": "1.0.229",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "serde_json",
+    "revision": "1.0.151",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "shlex",
+    "revision": "2.0.1",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "siphasher",
+    "revision": "1.0.3",
+    "license": "MIT/Apache-2.0"
+  },
+  {
+    "name": "slab",
+    "revision": "0.4.12",
+    "license": "MIT"
+  },
+  {
+    "name": "smallvec",
+    "revision": "1.15.2",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "syn",
+    "revision": "2.0.119",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "syn",
+    "revision": "3.0.3",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "thiserror",
+    "revision": "2.0.19",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "thiserror-impl",
+    "revision": "2.0.19",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "tokio",
+    "revision": "1.53.1",
+    "license": "MIT"
+  },
+  {
+    "name": "tokio-stream",
+    "revision": "0.1.19",
+    "license": "MIT"
+  },
+  {
+    "name": "unicode-ident",
+    "revision": "1.0.24",
+    "license": "(MIT OR Apache-2.0) AND Unicode-3.0"
+  },
+  {
+    "name": "unicode-segmentation",
+    "revision": "1.13.3",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "uuid",
+    "revision": "1.24.0",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "vsimd",
+    "revision": "0.8.0",
+    "license": "MIT"
+  },
+  {
+    "name": "wasm-bindgen",
+    "revision": "0.2.126",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "wasm-bindgen-macro",
+    "revision": "0.2.126",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "wasm-bindgen-macro-support",
+    "revision": "0.2.126",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "wasm-bindgen-shared",
+    "revision": "0.2.126",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "web-time",
+    "revision": "1.1.0",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "weezl",
+    "revision": "0.1.12",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "windows-link",
+    "revision": "0.2.1",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "name": "zmij",
+    "revision": "1.0.23",
+    "license": "MIT"
+  },
+  {
+    "name": "expat",
+    "revision": "6154446fccefbf3ca644894f598969113b0c7bcd",
+    "license": "MIT"
+  },
+  {
+    "name": "freetype",
+    "revision": "264b5fbf5b912b39f98d038bf75d39be0a73f21b",
+    "license": "FTL"
+  },
+  {
+    "name": "brotli",
+    "revision": "6d03dfbedda1615c4cba1211f8d81735575209c8",
+    "license": "MIT"
+  },
+  {
+    "name": "harfbuzz",
+    "revision": "9cb1fee51069b206effb4736e443b038d230789d",
+    "license": "MIT"
+  },
+  {
+    "name": "icu",
+    "revision": "d578f2e8b7bd5938e21cfb6bf15c079e0aa5b738",
+    "license": "ICU",
+    "notice": "icu-NOTICE.txt",
+    "source": "https://chromium.googlesource.com/chromium/deps/icu/+/d578f2e8b7bd5938e21cfb6bf15c079e0aa5b738/LICENSE?format=TEXT",
+    "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af"
+  },
+  {
+    "name": "libjxl",
+    "revision": "332feb17d17311c748445f7ee75c4fb55cc38530",
+    "license": "BSD-3-Clause",
+    "notice": "libjxl-NOTICE.txt",
+    "source": "https://chromium.googlesource.com/external/gitlab.com/wg1/jpeg-xl/+/332feb17d17311c748445f7ee75c4fb55cc38530/LICENSE?format=TEXT",
+    "sha256": "8405932022a556380c2d8c272eff154a923feb197233f348ce5f7334fb0a5ede"
+  },
+  {
+    "name": "highway",
+    "revision": "457c891775a7397bdb0376bb1031e6e027af1c48",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "libjpeg-turbo",
+    "revision": "e14cbfaa85529d47f9f55b0f104a579c1061f9ad",
+    "license": "BSD-3-Clause AND IJG AND Zlib",
+    "notice": "libjpeg-turbo-NOTICE.txt",
+    "source": "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo/+/e14cbfaa85529d47f9f55b0f104a579c1061f9ad/LICENSE.md?format=TEXT",
+    "sha256": "96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430"
+  },
+  {
+    "name": "libpng",
+    "revision": "d5515b5b8be3901aac04e5bd8bd5c89f287bcd33",
+    "license": "libpng-2.0",
+    "notice": "libpng-NOTICE.txt",
+    "source": "https://skia.googlesource.com/third_party/libpng/+/d5515b5b8be3901aac04e5bd8bd5c89f287bcd33/LICENSE?format=TEXT",
+    "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526"
+  },
+  {
+    "name": "libwebp",
+    "revision": "845d5476a866141ba35ac133f856fa62f0b7445f",
+    "license": "BSD-3-Clause",
+    "notice": "libwebp-NOTICE.txt",
+    "source": "https://chromium.googlesource.com/webm/libwebp/+/845d5476a866141ba35ac133f856fa62f0b7445f/COPYING?format=TEXT",
+    "sha256": "5aec868f669e384a22372a4e8a1a6cd7d44c64cd451f960ca69cc170d1e13acf"
+  },
+  {
+    "name": "wuffs",
+    "revision": "e3f919ccfe3ef542cfc983a82146070258fb57f8",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "zlib",
+    "revision": "646b7f569718921d7d4b5b8e22572ff6c76f2596",
+    "license": "Zlib",
+    "notice": "zlib-NOTICE.txt",
+    "source": "https://chromium.googlesource.com/chromium/src/third_party/zlib/+/646b7f569718921d7d4b5b8e22572ff6c76f2596/LICENSE?format=TEXT",
+    "sha256": "e1cfcc55c325b3f78cf55df9664abaa066e2271dffe8213347d9fccdfbac8f2c"
+  }
+]

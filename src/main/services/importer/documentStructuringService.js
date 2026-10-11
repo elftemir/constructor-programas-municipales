@@ -43,13 +43,23 @@ class DocumentStructuringService {
         stats
       };
     } else {
-      const pdfRes = await pdfExtractor.extract(buffer);
+      let pdfRes;
+      try {
+        const inspection = await ocrEngine.inspectPdf(buffer);
+        const rawText = inspection.pages.map(p => p.text).join('\n\n');
+        pdfRes = { isScanned: inspection.summary.pending > 0 || inspection.summary.failed > 0,
+          pageCount: inspection.pages.length, ocrPageCount: inspection.summary.pending,
+          areas: pdfExtractor.structurePdfText(rawText) };
+      } catch {
+        pdfRes = await pdfExtractor.extract(buffer);
+      }
       if (pdfRes.isScanned) {
         return {
           sourceName: proposedName,
           language,
           format: 'pdf',
           pageCount: pdfRes.pageCount,
+          ocrPageCount: pdfRes.ocrPageCount || pdfRes.pageCount,
           isScanned: true,
           areas: [],
           metadata: {},
@@ -73,30 +83,33 @@ class DocumentStructuringService {
     }
   }
 
-  async runOcr(filePath, language = 'es', onProgress = () => {}) {
-    if (!fs.existsSync(filePath)) throw new Error(`El archivo no existe: ${filePath}`);
+  async runOcr(filePath, language = 'es', onProgress = () => {}, options = {}) {
+    if (typeof filePath !== 'string' || path.extname(filePath).toLowerCase() !== '.pdf' ||
+        !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) throw new Error('OCR_INVALID_FILE');
     const buffer = fs.readFileSync(filePath);
     const proposedName = this.cleanProposedName(filePath);
 
-    const res = await ocrEngine.processScannedPdf(buffer, { onProgress, language });
+    const res = await ocrEngine.processScannedPdf(buffer, { onProgress, language, workers: options.workers });
     const areas = Array.isArray(res) ? res : (res.areas || []);
     const metadata = res.metadata || {};
     const stats = res.stats || this.computeStats(areas);
 
     return {
       sourceName: proposedName,
-      language,
+      language: language === 'both' ? (options.primaryLanguage || 'es') : language,
       format: 'pdf (ocr)',
       pageCount: res.pageCount,
       isScanned: false,
       areas,
       metadata,
-      stats
+      stats,
+      pages: res.pages,
+      summary: res.summary
     };
   }
 
   cancelOcr() {
-    ocrEngine.cancel();
+    return ocrEngine.cancel();
   }
 
   async classifyWithAi(blocks, context = {}) {
