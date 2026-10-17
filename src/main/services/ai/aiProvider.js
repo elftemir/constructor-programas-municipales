@@ -1,3 +1,4 @@
+const { getLema } = require('../../utils/lema');
 /**
  * aiProvider.js - Arquitectura de Proveedores de IA Local (Fase 2)
  * Constructor de Programas Municipales Podemos - Versión 2.0.1
@@ -17,6 +18,7 @@ const http = require('http');
 const { spawn } = require('child_process');
 const { getAiRuntimePath, getAiLogsDir, resolveLlamaRuntime, resolveModelsDir } = require('../../utils/paths');
 const { translateText, translateStructured } = require('./bilingualTranslator');
+const { BackendSelection } = require('./backendSelection');
 
 const TASK_TOKEN_LIMITS = {
   sugerir_titulos: 120,
@@ -107,6 +109,8 @@ class LlamaServerManager {
     this.shuttingDown = false;
     this.activeModelPath = null;
     this.activeModelId = null;
+    this.activeRuntimePath=null;
+    this.actualGpuLayers=0;
     this.port = null;
     this.status = 'STOPPED'; // 'STOPPED' | 'STARTING' | 'READY' | 'ERROR'
     this.lastError = null;
@@ -116,6 +120,17 @@ class LlamaServerManager {
     this.currentLogBytes = 0;
     this.maxLogBytes = MAX_LOG_FILE_BYTES;
     this.rotatingLog = false;
+    this.backendSelection = new BackendSelection();
+    this.activeBackend = 'cpu';
+    this.startPromise = null;
+    this.requestQueue = Promise.resolve();
+    this.pendingRequests = 0;
+    this.benchmarkPromise = null;
+    this.benchmarkController = null;
+    this.detectionTimer = null;
+    this.contextSize=4096;
+    this.activeContext=0;
+    this.currentRequestController=null;
   }
 
   openLogStream(logPath, headerLine = '') {
@@ -207,6 +222,8 @@ class LlamaServerManager {
   async stopServer(options = {}) {
     if (options && options.isAppQuit) {
       this.shuttingDown = true;
+      clearTimeout(this.detectionTimer);
+      this.benchmarkController?.abort();
     }
 
     const child = this.process;
@@ -266,6 +283,7 @@ class LlamaServerManager {
           await new Promise(r => setTimeout(r, 50));
         }
       }
+      if(this.isProcessAlive(pid))throw new Error('The owned AI server could not be stopped; another server will not be launched');
     }
 
     if (this.logFileStream) {
@@ -274,10 +292,11 @@ class LlamaServerManager {
     }
   }
 
-  async checkHealth(port, timeoutMs = 45000) {
+  async checkHealth(port, timeoutMs = 60000, signal = null) {
     const startTime = Date.now();
     return new Promise((resolve, reject) => {
       const poll = () => {
+        if(signal?.aborted)return reject(Object.assign(new Error('Benchmark preempted'),{code:'PREEMPTED'}));
         if (this.shuttingDown) {
           return reject(new Error('El servidor de IA se está deteniendo por cierre de la aplicación'));
         }
@@ -305,20 +324,144 @@ class LlamaServerManager {
     });
   }
 
-  async ensureServerRunning(modelPath, modelId) {
+  async interruptBenchmark() {
+    if (!this.benchmarkPromise) return;
+    this.benchmarkController?.abort();
+    await this.stopServer();
+    await this.benchmarkPromise;
+  }
+
+  async ensureServerRunning(modelPath, modelId, forced = null) {
+    if (!forced) await this.interruptBenchmark();
+    while (this.startPromise) await this.startPromise.catch(() => {});
+    this.startPromise = this.startServer(modelPath, modelId, forced);
+    try { return await this.startPromise; } finally { this.startPromise = null; }
+  }
+
+  async slotsState(endpoint){
+    const {localJson}=require('./localHttp');
+    const health=await localJson(endpoint,'/health',null,{timeout:3000});if(health.status!=='ok')throw Object.assign(Error('Server not healthy'),{code:'SERVER_UNHEALTHY'});
+    const slots=await localJson(endpoint,'/slots',null,{timeout:3000});
+    if(!Array.isArray(slots)||!slots.length||slots.some(slot=>!Number.isFinite(slot.n_ctx)||typeof slot.is_processing!=='boolean'))throw Object.assign(Error('Invalid server slots'),{code:'SERVER_UNHEALTHY'});
+    return slots.map(slot=>({id:slot.id,n_ctx:slot.n_ctx,is_processing:slot.is_processing}));
+  }
+
+  async waitIdle(endpoint,timeout=3000){
+    const end=Date.now()+timeout;let slots;
+    do{slots=await this.slotsState(endpoint);if(slots.every(slot=>!slot.is_processing))return slots;await new Promise(resolve=>setTimeout(resolve,100));}while(Date.now()<end);
+    throw Object.assign(Error('Server slot still occupied'),{code:'SLOT_BUSY'});
+  }
+
+  cancelCurrentRequest(){this.currentRequestController?.abort();}
+
+  async serverHealthy(endpoint){
+    if(!this.process||!endpoint)return false;
+    try{return (await require('./localHttp').localJson(endpoint,'/health',null,{timeout:3000})).status==='ok';}catch{return false;}
+  }
+
+  recordBackendTransition(from,to,error,reason){
+    const event={from,to,reason,errorCode:error?.code||'REQUEST_ERROR',httpStatus:error?.status||null,route:error?.route||null};
+    this.writeLogChunk('[BACKEND_TRANSITION] '+JSON.stringify(event)+'\n');
+    console.warn('[AI backend transition]',JSON.stringify(event));
+  }
+
+  async withRequest(modelPath, modelId, callback, options={}) {
+    this.pendingRequests++;
+    this.benchmarkController?.abort();
+    const operation = this.requestQueue.then(async () => {
+      if(options.signal?.aborted)throw Object.assign(Error('ABORTED'),{code:'ABORTED'});
+      this.contextSize=Math.max(this.contextSize,Math.min(32768,options.context||4096));
+      this.currentRequestController=new AbortController();
+      const controller=this.currentRequestController,abort=()=>controller.abort();options.signal?.addEventListener('abort',abort,{once:true});
+      let endpoint;
+      const invoke=async()=>{if(controller.signal.aborted)throw Object.assign(Error('ABORTED'),{code:'ABORTED'});const slots=this.process?await this.waitIdle(endpoint):null;if(slots)this.activeContext=Math.min(...slots.map(slot=>slot.n_ctx));const result=await callback(endpoint,controller.signal,slots);require('./generationSource').recordNative(this.activeBackend,modelId);return result;};
+      try { endpoint=await this.ensureServerRunning(modelPath,modelId);return await invoke(); }
+      catch (error) {
+        if(error.code==='ABORTED'){try{await this.waitIdle(endpoint,1500);}catch{await this.stopServer();}throw error;}
+        if(error.code==='CONTEXT_TOO_LONG'&&error.requiredContext<=32768&&error.requiredContext>this.contextSize){this.contextSize=Math.ceil(error.requiredContext/2048)*2048;await this.stopServer();endpoint=await this.ensureServerRunning(modelPath,modelId);return await invoke();}
+        if(['CONTEXT_TOO_LONG','RESPONSE_TOO_LARGE','INVALID_JSON','INVALID_TEMPLATE','INVALID_TOKEN_COUNT','TRUNCATED'].includes(error.code))throw error;
+        // A request failure is never evidence that GPU hardware failed.
+        if(await this.serverHealthy(endpoint)){
+          try{await this.waitIdle(endpoint,1500);}catch{await this.stopServer();}
+          throw error;
+        }
+        const backend=this.activeBackend;
+        await this.stopServer();
+        try{endpoint=await this.ensureServerRunning(modelPath,modelId,{backend,device:this.backendSelection.config.device,ngl:this.backendSelection.config.ngl});return await invoke();}catch(retryError){
+          if(retryError.code==='ABORTED'||await this.serverHealthy(endpoint)||backend!=='gpu')throw retryError;
+          error=retryError;
+        }
+        this.recordBackendTransition('gpu','cpu',error,'server-dead-or-health-unavailable');
+        require('./generationSource').recordFallback('gpu-server-unhealthy');
+        this.backendSelection.markFailed(Object.assign(Error('SERVER_UNHEALTHY'),{code:'SERVER_UNHEALTHY'}));
+        await this.stopServer();
+        endpoint = await this.ensureServerRunning(modelPath, modelId, {backend:'cpu'});
+        return await invoke();
+      }finally{
+        if(controller.signal.aborted&&this.process&&endpoint){try{await this.waitIdle(endpoint,1500);}catch{await this.stopServer();}}
+        options.signal?.removeEventListener('abort',abort);if(this.currentRequestController===controller)this.currentRequestController=null;
+      }
+    });
+    this.requestQueue = operation.catch(() => {});
+    try { return await operation; }
+    finally { this.pendingRequests--; this.scheduleDetection(modelPath,modelId); }
+  }
+
+  scheduleDetection(modelPath,modelId) {
+    clearTimeout(this.detectionTimer);
+    if(this.shuttingDown||this.pendingRequests||this.benchmarkPromise)return;
+    this.detectionTimer=setTimeout(()=>{
+      const operation=this.requestQueue.then(async()=>{
+        if(this.pendingRequests||this.shuttingDown)return;
+        const selection=await this.backendSelection.select(modelPath).catch(()=>null);
+        if(!selection?.needsDetection)return;
+        const controller=new AbortController();this.benchmarkController=controller;
+        this.benchmarkPromise=this.backendSelection.detect(modelPath,async options=>{
+          if(options.signal.aborted||this.pendingRequests)throw Object.assign(Error('Preempted'),{code:'PREEMPTED'});
+          const endpoint=await this.ensureServerRunning(modelPath,modelId,options);
+          if(options.signal.aborted||this.pendingRequests)throw Object.assign(Error('Preempted'),{code:'PREEMPTED'});
+          const result=await this.benchmarkCompletion(endpoint,options.signal);
+          return {tokensPerSecond:result.timings?.predicted_per_second,valid:typeof result.content==='string'&&result.content.trim().length>0&&result.tokens_predicted>=64,ngl:this.activeNgl};
+        },controller.signal);
+        try{await this.benchmarkPromise;}catch(error){console.warn('[AI detection]',error.code||'DETECTION_ERROR');}
+        finally{
+          this.benchmarkPromise=null;this.benchmarkController=null;
+          // The next queued generation starts the selected backend. No out-of-queue restore.
+          if(controller.signal.aborted||this.backendSelection.getStatus().backend==='cpu')await this.stopServer();
+        }
+      });
+      this.requestQueue=operation.catch(()=>{});
+    },1200);
+    this.detectionTimer.unref?.();
+  }
+
+  benchmarkCompletion(endpoint,signal) {
+    return new Promise((resolve,reject)=>{
+      const body=JSON.stringify({prompt:'Write a short explanation of how to organize a public meeting.',n_predict:64,temperature:0,seed:1234,ignore_eos:true,cache_prompt:false,stream:false});
+      const url=new URL(endpoint+'/completion');
+      const request=http.request({hostname:'127.0.0.1',port:url.port,path:url.pathname,method:'POST',headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)},timeout:60000,signal},response=>{
+        let data='';response.on('data',chunk=>data+=chunk);response.on('end',()=>{try{if(response.statusCode!==200)throw Error('Benchmark HTTP '+response.statusCode);resolve(JSON.parse(data));}catch(error){reject(error);}});
+      });request.on('error',reject);request.on('timeout',()=>request.destroy(Error('Benchmark timed out')));request.end(body);
+    });
+  }
+
+  async startServer(modelPath, modelId, forced = null) {
     if (this.shuttingDown) {
       throw new Error('El servidor local de IA no admite nuevas peticiones durante el cierre de la aplicación.');
     }
 
     // Si ya está corriendo con el mismo modelo y saludable, reutilizarlo
-    if (this.process && this.status === 'READY' && this.activeModelPath === modelPath && this.port) {
+    let selection;
+    if(forced){const backend=forced.backend;selection={...forced,executable:await this.backendSelection.verify(backend==='gpu'?'vulkan':'cpu')};}
+    else selection=await this.backendSelection.select(modelPath);
+    if (this.process && this.status === 'READY' && this.activeModelPath === modelPath && this.activeBackend === selection.backend && this.port && this.activeContext>=this.contextSize) {
       return `http://127.0.0.1:${this.port}`;
     }
 
     // Si había un modelo diferente en ejecución, detenerlo
     await this.stopServer();
 
-    const runtime = resolveLlamaRuntime();
+    const runtime = {exists:true,executablePath:selection.executable,source:'verified '+selection.backend+' b11476'};
     if (!runtime.exists || !runtime.executablePath) {
       this.status = 'ERROR';
       this.lastError = 'Ejecutable llama-server.exe no encontrado en los recursos de la aplicación.';
@@ -350,10 +493,16 @@ class LlamaServerManager {
       '--port', String(port),
       '--cors-origins', 'localhost',
       '--no-cors-credentials',
-      '--ctx-size', '4096',
+      '--ctx-size', String(this.contextSize),
+      '--parallel', '1',
+      '--slots',
       '--threads', String(threads),
-      '--n-predict', '1024'
+      '--log-verbosity', '4',
+      '--n-predict', '-1'
     ];
+    args.push('--gpu-layers',selection.backend==='gpu'?String(selection.fit?'auto':selection.ngl||99):'0');
+    if(selection.backend==='gpu'&&selection.device?.id)args.push('--device',selection.device.id);
+    if(selection.backend==='gpu'&&selection.fit)args.push('--fit','on');
 
     console.log(`[LlamaServer] Ejecutando: ${runtimePath} (${runtime.source}) ${args.join(' ')}`);
 
@@ -361,6 +510,12 @@ class LlamaServerManager {
     this.port = port;
     this.activeModelPath = modelPath;
     this.activeModelId = modelId;
+    this.activeBackend = selection.backend;
+    this.activeRuntimePath=runtimePath;
+    this.activeContext=this.contextSize;
+    this.actualGpuLayers=0;
+    this.offloadLogTail='';
+    this.activeNgl = selection.backend==='gpu'?(selection.fit?'auto':selection.ngl||99):0;
 
     const child = spawn(runtimePath, args, {
       windowsHide: true,
@@ -368,10 +523,12 @@ class LlamaServerManager {
     });
 
     child.stdout.on('data', chunk => {
+      this.captureGpuLayers(chunk);
       this.writeLogChunk(chunk);
     });
 
     child.stderr.on('data', chunk => {
+      this.captureGpuLayers(chunk);
       this.writeLogChunk(chunk);
     });
 
@@ -383,9 +540,11 @@ class LlamaServerManager {
 
     child.on('exit', (code, signal) => {
       console.log(`[LlamaServer] Proceso finalizado (code: ${code}, signal: ${signal})`);
+      if(this.process!==child)return;
       if (this.status !== 'STOPPED') {
         this.status = 'ERROR';
         this.lastError = `El servidor se cerró inesperadamente con código ${code}`;
+        if(this.activeBackend==='gpu'){this.recordBackendTransition('gpu','cpu',{code:'PROCESS_EXIT'},'server-exited');this.backendSelection.markFailed(this.lastError);}
       }
     });
 
@@ -393,17 +552,25 @@ class LlamaServerManager {
     this.ownedPid = child.pid;
 
     try {
-      await this.checkHealth(port);
+      await this.checkHealth(port,60000,forced?.signal);
       this.status = 'READY';
       this.lastError = null;
       console.log(`[LlamaServer] Servidor listo en http://127.0.0.1:${port}`);
       return `http://127.0.0.1:${port}`;
     } catch (err) {
       await this.stopServer();
+      if(selection.backend==='gpu'&&!selection.fit&&!forced?.signal?.aborted)return await this.startServer(modelPath,modelId,{...selection,fit:true,allowCpuFallback:forced?.allowCpuFallback??!forced});
+      if(selection.backend==='gpu'&&(forced?.allowCpuFallback??!forced)){this.recordBackendTransition('gpu','cpu',err,'startup-health-unavailable');this.backendSelection.markFailed(err);return await this.startServer(modelPath,modelId,{backend:'cpu'});}
       this.status = 'ERROR';
       this.lastError = err.message;
       throw err;
     }
+  }
+
+  captureGpuLayers(chunk){
+    this.offloadLogTail=(this.offloadLogTail||'')+chunk.toString();
+    const offload=this.offloadLogTail.match(/offloaded\s+(\d+)\/\d+\s+layers to GPU/i);if(offload)this.actualGpuLayers=Number(offload[1]);
+    this.offloadLogTail=this.offloadLogTail.slice(-1024);
   }
 
   getDiagnosticInfo() {
@@ -415,8 +582,10 @@ class LlamaServerManager {
     return {
       runtimeAvailable,
       runtimeExists: runtimeAvailable, // retrocompatibilidad
-      runtimePath: runtime.executablePath || 'No disponible',
-      runtimeSource: runtime.source,
+      runtimePath: serverRunning?this.activeRuntimePath:null,
+      runtimeSource: serverRunning?'verified '+this.activeBackend+' b11476':null,
+      device:serverRunning&&this.activeBackend==='gpu'?this.backendSelection.config.device:null,
+      gpuLayers:serverRunning&&this.activeBackend==='gpu'?this.actualGpuLayers:0,
       modelAvailable: !!(this.activeModelPath && fs.existsSync(this.activeModelPath)),
       modelId: this.activeModelId,
       modelPath: this.activeModelPath,
@@ -429,6 +598,8 @@ class LlamaServerManager {
       pid: this.process ? this.process.pid : null,
       lastError: this.lastError,
       lastTestOk: !!this.lastTestOk
+      ,nCtx:serverRunning?this.activeContext:null,nPredictDefault:serverRunning?-1:null,totalSlots:serverRunning?1:0
+      ,backend:this.activeBackend,backendState:this.backendSelection.getStatus()
     };
   }
 }
@@ -480,7 +651,7 @@ function extractJsonFromAi(text) {
  * LlamaCppProvider: Proveedor de IA que ejecuta modelos neuronales GGUF locales
  */
 class LlamaCppProvider extends BaseAiProvider {
-  constructor(modelPath, modelId = 'qwen2.5-3b-instruct-q4') {
+  constructor(modelPath, modelId = 'qwen2.5-1.5b-instruct-q4') {
     super('LlamaCppProvider');
     this.modelPath = modelPath;
     this.modelId = modelId;
@@ -495,7 +666,7 @@ class LlamaCppProvider extends BaseAiProvider {
   async testConnection(options = {}) {
     const startTime = Date.now();
     try {
-      const endpoint = await this.manager.ensureServerRunning(this.modelPath, this.modelId);
+      const endpoint='http://127.0.0.1:'+(this.manager.port||1);
       
       // Prueba dinámica neuronal con dos enteros de 2 cifras (Sección 8.1)
       const a = Math.floor(Math.random() * 70) + 15;
@@ -528,8 +699,8 @@ class LlamaCppProvider extends BaseAiProvider {
         tiempo_ms: duration,
         durationMs: duration,
         modelId: this.modelId,
-        modelName: 'Qwen 2.5 3B Instruct',
-        modelo: 'Qwen 2.5 3B Instruct',
+        modelName: require('../../../../data/ai_models.json').models.find(model=>model.id===this.modelId)?.name || this.modelId,
+        modelo: require('../../../../data/ai_models.json').models.find(model=>model.id===this.modelId)?.name || this.modelId,
         pid: this.manager.process ? this.manager.process.pid : null,
         port: this.manager.port,
         tokens_generados: numbers.length > 0 ? 2 : 1,
@@ -572,64 +743,129 @@ class LlamaCppProvider extends BaseAiProvider {
   }
 
   async callChat(endpoint, messages, options = {}) {
-    await require('./contextBudget').checkContextBudget(endpoint, messages, options.max_tokens || 512, options.idioma);
-    return new Promise((resolve, reject) => {
-      const postData = JSON.stringify({
+    const estimated=Math.ceil((JSON.stringify(messages).length/2+(options.max_tokens||512)+256)/2048)*2048;
+    return this.manager.withRequest(this.modelPath,this.modelId,(freshEndpoint,signal,slots)=>this.callChatRaw(freshEndpoint,messages,{...options,signal:signal||options.signal,slots}),{signal:options.signal,context:Math.max(options.context||4096,estimated)});
+  }
+
+  async callChatRaw(endpoint, messages, options = {}) {
+    const trace={requestId:Date.now()+'-'+Math.random().toString(16).slice(2,8),backend:this.manager.activeBackend,modelId:this.modelId,nCtx:this.manager.activeContext||4096,maxTokens:options.max_tokens||512,timeoutMs:options.timeout||120000,slotsBefore:options.slots||null};
+    const started=Date.now();
+    try{
+      trace.promptTokens=await require('./contextBudget').checkContextBudget(endpoint,messages,trace.maxTokens,options.idioma,trace.nCtx);
+      const postData = {
         messages,
-        temperature: options.temperature !== undefined ? options.temperature : 0.3,
+        ...require('../../../shared/writingContract').NORMAL_GENERATION,
+        ...(options.temperature!==undefined?{temperature:options.temperature}:{}),
+        ...(options.repeat_penalty!==undefined?{repeat_penalty:options.repeat_penalty}:{}),
+        stop: options.stop || ['<|im_end|>','<|endoftext|>'],
+        ...(options.responseSchema?{response_format:{type:'json_object',schema:options.responseSchema}}:{}),
         max_tokens: options.max_tokens || 512,
+        cache_prompt:false,
         stream: false
-      });
+      };
+      trace.maxResponseBytes=Math.max(262144,trace.maxTokens*32);
+      const data=await require('./localHttp').localJson(endpoint,'/v1/chat/completions',postData,{timeout:trace.timeoutMs,signal:options.signal,maxBytes:trace.maxResponseBytes});
+      trace.finishReason=data.choices?.[0]?.finish_reason||'unknown';trace.completionTokens=data.usage?.completion_tokens||data.timings?.predicted_n||null;trace.serverPromptTokens=data.usage?.prompt_tokens||null;
+      const content=data.choices?.[0]?.message?.content||'';
+      this.lastCompletionStats={tokens:trace.completionTokens,tokensPerSecond:data.timings?.predicted_per_second||null,finishReason:trace.finishReason,inference:trace};
+      if(trace.finishReason==='length')throw Object.assign(Error('TRUNCATED'),{code:'TRUNCATED'});
+      return content;
+    }catch(error){trace.error=error.code||error.message;trace.finishReason=trace.finishReason||(error.code==='TIMEOUT'?'timeout':error.code==='ABORTED'?'abort':'error');this.lastCompletionStats={inference:trace,finishReason:trace.finishReason};throw error;}
+    finally{trace.elapsedMs=Date.now()-started;if(this.manager.process)try{trace.slotsAfter=await this.manager.slotsState(endpoint);}catch{trace.slotsAfter=null;}this.manager.writeLogChunk?.('[INFERENCE] '+JSON.stringify(trace)+'\n');}
+  }
 
-      const url = new URL(`${endpoint}/v1/chat/completions`);
-      const req = http.request({
-        protocol: url.protocol,
-        hostname: url.hostname,
-        port: url.port,
-        path: url.pathname,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData)
-        },
-        timeout: options.timeout || 120000
-      }, (res) => {
-        let body = '';
-        res.on('data', chunk => body += chunk);
-        res.on('end', () => {
-          if (res.statusCode !== 200) {
-            return reject(new Error(`llama-server respondió HTTP ${res.statusCode}: ${body.substring(0, 200)}`));
-          }
-          try {
-            const data = JSON.parse(body);
-            const content = data.choices?.[0]?.message?.content || '';
-            resolve(content);
-          } catch (e) {
-            reject(new Error(`Error al procesar JSON de llama-server: ${e.message}`));
-          }
-        });
-      });
+  async generateWriting(task,params,options={}) {
+    await require('./orthography').ready();
+    const quality=require('./writingQuality'),ca=(params.idioma_salida||params.idioma)==='ca',started=Date.now();
+    const limits=require('../../../shared/writingLimits').limits(task,params),maxTokens=limits.maxTokens,checks=[];
+    if((limits.long||(task==='redactar_presentacion'&&(params.selectedMeasures||[]).length>=require('../../../shared/writingContract').LONG_MIN_SELECTED))&&!options.translationObject)return this.generateLongWriting(params,options);
+    let attempts=0,issues=[],previousRaw=null;
+    try{
+      const endpoint='http://127.0.0.1:'+(this.manager.port||1);
+      for(attempts=1;attempts<=2;attempts++){
+        const messages=options.translationObject?[
+          {role:'system',content:(ca?'Tradueix fidelment al català. No afegeixis ni ometis contingut.':'Traduce fielmente al castellano. No añadas ni omitas contenido.')+' '+(ca?'Mantén exactament el municipi: ':'Mantén exactamente el municipio: ')+params.municipio+'. '+(ca?'Retorna només els camps del JSON indicat, sense instruccions, valles ni repeticions.':'Devuelve solo los campos del JSON indicado, sin instrucciones, vallas ni repeticiones.')+(attempts>1?(ca?' La resposta anterior no era vàlida; corregeix el format i la qualitat.':'La respuesta anterior no era válida; corrige el formato y la calidad.'):'')},
+          {role:'user',content:JSON.stringify(options.translationObject)}
+        ]:quality.prompt(task,params,ca?'ca':'es',attempts>1,issues);
+        if(previousRaw&&issues.length&&issues.every(code=>code==='LANGUAGE_MIX'))messages.push({role:'user',content:(ca?'Corregeix només la llengua d’aquest esborrany generat. Mantén les idees, sense afegir fets, nombres ni municipis. Retorna el mateix esquema JSON en català normatiu: ':'Corrige solo el idioma de este borrador generado, conservando las ideas y el mismo esquema JSON: ')+previousRaw});
+        try{
+          const raw=await this.callChat(endpoint,messages,{...require('../../../shared/writingContract').NORMAL_GENERATION,max_tokens:maxTokens,context:limits.context,timeout:require('../../../shared/writingLimits').timeout(maxTokens,this.manager.activeBackend),signal:options.signal||params._generationSignal,idioma:ca?'ca':'es',responseSchema:quality.responseSchema(task,ca?'ca':'es')});
+          previousRaw=raw;
+          const data=quality.formatAndValidate(task,raw,params);
+          checks.push({...this.lastCompletionStats?.inference,validation:[],warningCodes:data.validation.warnings.map(w=>w.code),wordCount:data.formattedText.split(/\s+/).length});
+          const qualityWarnings=data.validation.warnings.map(w=>({...w,message_es:quality.warningText(w,'es'),message_ca:quality.warningText(w,'ca')}));
+          this.manager.writeLogChunk?.('[WRITING_CORRECTIONS] '+JSON.stringify({count:data.validation.corrections,language:ca?'ca':'es'})+'\n');
+          return {ok:true,data,...data,texto:data.formattedText,titulos:[],avisos:require('../../../shared/writingWarnings').messages(qualityWarnings,ca?'ca':'es'),qualityWarnings,error:null,meta:{modelId:this.modelId,provider:this.name,operation:task,durationMs:Date.now()-started,attempts,retried:attempts>1,backend:this.manager.activeBackend,...this.lastCompletionStats,responseChecks:checks}};
+        }catch(error){issues=error.qualityErrors||[error.code||error.message];checks.push({...this.lastCompletionStats?.inference,validation:issues});this.manager.writeLogChunk?.('[WRITING_VALIDATION] '+JSON.stringify(checks.at(-1))+'\n');if(attempts===2||error.code==='ABORTED')throw error;}
+      }
+    }catch(error){
+      return {ok:false,data:null,texto:null,titulos:[],avisos:[],error:{code:error.code==='ABORTED'?'CANCELLED':'INVALID_GENERATION',message:ca?'La IA no ha pogut generar aquest text.':'La IA no ha podido generar este texto.'},meta:{modelId:this.modelId,provider:this.name,operation:task,attempts:Math.min(attempts,2),qualityErrors:error.qualityErrors||[error.code||error.message],durationMs:Date.now()-started,backend:this.manager.activeBackend,...this.lastCompletionStats,responseChecks:checks}};
+    }
+  }
 
-      req.on('timeout', () => {
-        req.destroy(new Error('Tiempo de espera agotado durante la inferencia local (TIMEOUT)'));
-      });
-
-      req.on('error', reject);
-      req.write(postData);
-      req.end();
-    });
+  async generateLongWriting(params,options={}){
+    await require('./orthography').ready();
+    const quality=require('./writingQuality'),contract=require('../../../shared/writingContract'),ca=(params.idioma_salida||params.idioma)==='ca',lang=ca?'ca':'es',started=Date.now(),checks=[];
+    const long=params.longitud!=='corta',targetWords=long?500:300;
+    const measures=params.selectedMeasures||[],minimum=contract.minimumState('redactar_presentacion',measures,lang,{longitud:long?'estandar':'corta'});
+    if(!minimum.allowed)return {ok:false,error:{code:'MIN_SELECTED_MEASURES',message:minimum.message},selection:minimum};
+    const groupCount=Math.max(1,Math.min(long?6:3,measures.length)),groups=Array.from({length:groupCount},(_,index)=>measures.filter((_,i)=>Math.min(groupCount-1,Math.floor(i*groupCount/measures.length))===index)),omitted=[],corrections=[];
+    let paragraphMax=220;
+    try{
+      const endpoint='http://127.0.0.1:'+(this.manager.port||1),system=quality.prompt('redactar_presentacion',params,lang)[0];
+      const fragment=async index=>{
+        const header=index===-1,subset=header?measures:groups[index],facts=ca?{municipi:params.municipio,candidatura:params.organizacion||params.partido,mandat:params.mandato,mesures:subset.map(m=>({titol:m.titulo,text:m.texto}))}:{municipio:params.municipio,organizacion:params.organizacion||params.partido,mandato:params.mandato,medidas:subset.map(m=>({titulo:m.titulo,texto:m.texto}))};let lastIssues=[];
+        for(let retry=0;retry<2;retry++){
+          const fields=header?(ca?{titol:'',entradeta:''}:{titulo:'',entradilla:''}):(ca?{text:''}:{texto:''});
+          const instruction=header?(ca?'Escriu un títol breu i una entradeta de 15 a 40 paraules, diferent del títol.':'Escribe un título breve y una entradilla de 15 a 40 palabras, diferente del título.'):(ca?'Escriu UN paràgraf de 60 a 90 paraules sobre aquestes mesures. Desenvolupa els compromisos en primera persona del plural i futur. No canviïs la finalitat d’una mesura ni inventis dades.':'Escribe UN párrafo de 60 a 90 palabras sobre estas medidas. Desarrolla los compromisos en primera persona del plural y futuro. No cambies la finalidad de una medida ni inventes datos.');
+          try{
+            const raw=await this.callChat(endpoint,[retry?quality.prompt('redactar_presentacion',params,lang,true,lastIssues)[0]:system,{role:'user',content:JSON.stringify(facts)+'\n'+instruction+'\n'+(ca?'Retorna només JSON amb aquests camps: ':'Devuelve solo JSON con estos campos: ')+Object.keys(fields).join(', ')}],{...contract.NORMAL_GENERATION,max_tokens:header?450:700,context:8192,timeout:require('../../../shared/writingLimits').timeout(header?450:700,this.manager.activeBackend),signal:options.signal||params._generationSignal,idioma:lang,responseSchema:{type:'object',properties:Object.fromEntries(Object.keys(fields).map(key=>[key,{type:'string'}])),required:Object.keys(fields),additionalProperties:false}});
+            let object=contract.parseJson(raw);if(!object)object=require('../../../shared/textFormat').internalObject(raw);
+            if(!object||typeof object!=='object')throw Object.assign(Error('INVALID_JSON'),{qualityErrors:['INVALID_JSON']});
+            const title=object.titulo||object.titol||'',text=header?(object.entradilla||object.entradeta||''):(object.texto||object.text||'');
+            if(typeof text!=='string'||!text.trim()||(header&&(typeof title!=='string'||!title.trim())))throw Object.assign(Error('EMPTY'),{qualityErrors:['EMPTY']});
+            const value=quality.validatePrepared('redactar_fragmento',header?{titulo:title,entradilla:text,formattedText:[title,text].join('\n\n')}:{texto:text,formattedText:text},{...params,fragmentMaxWords:header?160:paragraphMax});
+            const words=text.trim().split(/\s+/).filter(Boolean).length;
+            if(words<(header?15:60)||words>(header?40:90))value.validation.warnings.push({code:'FRAGMENT_LENGTH',fragment:value.entradilla||value.texto,start:header?value.formattedText.indexOf(value.entradilla):0,end:value.formattedText.length,count:words});
+            corrections.push(...value.validation.warnings.filter(w=>w.corrected).map(w=>({...w,part:header?'header':'paragraph-'+(index+1)})));
+            checks.push({...this.lastCompletionStats?.inference,part:header?'header':'paragraph-'+(index+1),measureIndices:header?[]:subset.map(m=>measures.indexOf(m)+1),validation:[],warningCodes:value.validation.warnings.map(w=>w.code),wordCount:words});
+            return{value,warnings:value.validation.warnings};
+          }catch(error){lastIssues=error.qualityErrors||[error.code||error.message];const row={...this.lastCompletionStats?.inference,part:header?'header':'paragraph-'+(index+1),validation:lastIssues};checks.push(row);this.manager.writeLogChunk?.('[WRITING_VALIDATION] '+JSON.stringify(row)+'\n');if(error.code==='ABORTED')throw error;if(retry){omitted.push({part:row.part,measureIndices:subset.map(m=>measures.indexOf(m)+1),codes:lastIssues});return null;}}
+        }
+      };
+      const first=await fragment(-1);if(!first)throw Object.assign(Error('EMPTY'),{qualityErrors:['EMPTY']});const header={titulo:first.value.titulo,entradilla:first.value.entradilla},parrafos=[],accepted=[first];let generatedWords=first.value.formattedText.split(/\s+/).filter(Boolean).length;
+      for(let index=0;index<groupCount;index++){
+        paragraphMax=Math.max(90,Math.min(220,targetWords-generatedWords));const result=await fragment(index);if(!result)continue;parrafos.push(result.value.texto);accepted.push(result);generatedWords+=result.value.texto.trim().split(/\s+/).filter(Boolean).length;
+      }
+      if(parrafos.length<2)throw Object.assign(Error('EMPTY'),{qualityErrors:['EMPTY']});
+      // Each fragment already passed the blocking checks. Cross-fragment checks are warnings.
+      const data=quality.formatAndValidate('redactar_presentacion',{...header,parrafos},params,{blocking:false});
+      for(const item of accepted)for(const warning of item.warnings.filter(w=>w.corrected||w.code==='FRAGMENT_LENGTH')){
+        const field=item.value.entradilla||item.value.texto,start=data.formattedText.indexOf(warning.corrected?item.value.formattedText:field);data.validation.warnings.push({...warning,start:warning.corrected?Math.max(0,start+warning.start):start,end:warning.corrected?Math.max(0,start+warning.start+1):start+field.length});
+      }
+      if(omitted.length)data.validation.warnings.push({code:'MISSING_FRAGMENTS',fragment:omitted.map(o=>o.measureIndices.join(', ')).filter(Boolean).join('; '),start:-1,end:-1});
+      const unique=[...new Map(data.validation.warnings.map(w=>[w.code+':'+w.start+':'+w.fragment,w])).values()],qualityWarnings=unique.map(w=>({...w,message_es:quality.warningText(w,'es'),message_ca:quality.warningText(w,'ca')}));
+      this.manager.writeLogChunk?.('[WRITING_CORRECTIONS] '+JSON.stringify({count:corrections.length+data.validation.corrections,language:lang})+'\n');
+      return{ok:true,data,...data,texto:data.formattedText,avisos:require('../../../shared/writingWarnings').messages(qualityWarnings,ca?'ca':'es'),qualityWarnings,titulos:[],error:null,meta:{modelId:this.modelId,provider:this.name,operation:'redactar_presentacion',segmented:true,attempts:1,retried:checks.some(row=>row.validation.length>0),omittedFragments:omitted,automaticCorrections:corrections.length+data.validation.corrections,backend:this.manager.activeBackend,durationMs:Date.now()-started,...this.lastCompletionStats,responseChecks:checks}};
+    }catch(error){return{ok:false,data:null,texto:null,avisos:[],titulos:[],error:{code:error.code==='ABORTED'?'CANCELLED':'INVALID_GENERATION',message:ca?'No hi ha prou fragments vàlids per mostrar una proposta.':'No hay suficientes fragmentos válidos para mostrar una propuesta.'},meta:{modelId:this.modelId,operation:'redactar_presentacion',segmented:true,qualityErrors:error.qualityErrors||[error.code||error.message],backend:this.manager.activeBackend,durationMs:Date.now()-started,responseChecks:checks}};}
   }
 
   async generate(task, promptConfig, options = {}) {
+    if(require('../../../shared/writingContract').MIN_SELECTED[task])return this.generateWriting(task,promptConfig,options);
+    if(task==='traducir_texto_estructurado'&&require('../../../shared/writingContract').MIN_SELECTED[promptConfig.generationTask]){
+      const idioma=promptConfig.a||promptConfig.to||promptConfig.idioma_destino||promptConfig.idioma||'ca';
+      const translationObject=promptConfig.objeto||promptConfig.sourceObject||promptConfig.datos||promptConfig.data||{};
+      return this.generateWriting(promptConfig.generationTask,{...promptConfig,idioma,idioma_salida:idioma,translationSource:translationObject},{...options,translationObject});
+    }
     const startTime = Date.now();
     // Normalización canónica de parámetros (Sección 4.1)
     const text = promptConfig.texto || promptConfig.text || promptConfig.texto_actual || promptConfig.texto_original || promptConfig.puntosClave || '';
     const mun = promptConfig.municipio || promptConfig.municipality || 'el municipi';
     const area = promptConfig.area || promptConfig.area_nombre || '';
     const org = promptConfig.organizacion || promptConfig.partido || 'Podemos';
-    const lema = promptConfig.lema || '';
     const mandato = promptConfig.mandato || '2027–2031';
     const lang = promptConfig.idioma_salida || promptConfig.idioma || promptConfig.language || 'es';
+    const lema = getLema(promptConfig, lang) || '';
     const isCa = lang === 'ca';
 
     // Determinar límites de tokens específicos por tarea (Sección 6.1)
@@ -648,7 +884,7 @@ class LlamaCppProvider extends BaseAiProvider {
     const timeoutMs = options.timeout || (task === 'redactar_presentacion' ? 180000 : 120000);
 
     try {
-      const endpoint = await this.manager.ensureServerRunning(this.modelPath, this.modelId);
+      const endpoint='http://127.0.0.1:'+(this.manager.port||1);
       let systemPrompt = '';
       if (task === 'traducir_texto') {
         const sourceLang = promptConfig.de || promptConfig.from || (isCa ? 'es' : 'ca');
@@ -1054,7 +1290,7 @@ RESPONDE ÚNICAMENTE CON EL ARRAY JSON:`;
         redactar_presentacion: 0.6,
         redactar_cierre: 0.6
       };
-      const taskTemp = options.temperature !== undefined ? options.temperature : (defaultTemps[task] || 0.3);
+      const taskTemp = options.temperature !== undefined ? options.temperature : require('../../../shared/writingContract').NORMAL_GENERATION.temperature;
 
       const executeCall = async () => {
         const raw = await this.callChat(endpoint, [
@@ -1520,6 +1756,7 @@ class BuiltinLocalAiEngine extends BaseAiProvider {
   }
 
   async generate(task, promptConfig, options = {}) {
+    if(require('../../../shared/writingContract').MIN_SELECTED[task])return require('./builtinWriting').generate(task,promptConfig);
     const startTime = Date.now();
     const lang = promptConfig.idioma_salida || promptConfig.idioma || 'es';
     const isCa = lang === 'ca';
@@ -1655,7 +1892,7 @@ class BuiltinLocalAiEngine extends BaseAiProvider {
       case 'redactar_presentacion': {
         const mun = promptConfig.municipio || (isCa ? 'el nostre municipi' : 'nuestro municipio');
         const org = promptConfig.organizacion || (isCa ? 'Podem' : 'Podemos');
-        const lema = promptConfig.lema || '';
+        const lema = getLema(promptConfig, lang) || '';
         const mandato = promptConfig.mandato || '2027–2031';
         const titulo = isCa
           ? `Un projecte comú per a ${mun}: serveis públics i drets garantits`
@@ -1741,7 +1978,7 @@ class BuiltinLocalAiEngine extends BaseAiProvider {
       case 'redactar_cierre': {
         const mun = promptConfig.municipio || (isCa ? 'el nostre municipi' : 'nuestro municipio');
         const org = promptConfig.organizacion || 'Podemos';
-        const lema = promptConfig.lema || '';
+        const lema = getLema(promptConfig, lang) || '';
         const titulo = isCa
           ? `El nostre compromís amb ${mun}: fets, paraula i futur`
           : `Nuestro compromiso con ${mun}: hechos, palabra y futuro`;

@@ -10,4 +10,4 @@
 - Desinstalación completa de programa, registro y accesos. Borrar datos solo con respuesta afirmativa explícita; al actualizar no preguntar ni borrarlos.
 - DisplayVersion procede de package.json. Mantener GUID d88b1329-31ed-5768-a1d9-d8e0626bf064.
 - Codex nunca modifica la instalación real de Program Files ni ejecuta el instalador o desinstalador real. Las pruebas sobre ella las realiza el usuario.
-- Entregar EXE, blockmap, latest.yml, hashes, archivos de versión y fuentes en instalable. No modificar el repositorio de contenidos ni la descarga de Programas Marco.
+- Entrega vigente desde 3.8.0: instalable contiene EXE versionado, blockmap, latest.yml, SHA256, VERSION y guía de prueba; el código fuente y los contenidos se entregan en carpetas separadas. Archivar lo anterior sin borrarlo. No modificar los repositorios remotos; conservar las comprobaciones criptográficas y las URL de actualización.

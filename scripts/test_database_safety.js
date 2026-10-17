@@ -33,15 +33,15 @@ async function main() {
   assert(fs.readdirSync(path.join(root, 'backups/recovery')).length === 1);
   database.closeDb();
   const migrations = path.join(root, 'backups/migrations');
-  assert(fs.readdirSync(migrations).some(name => name.includes('schema0-to-5')));
+  assert(fs.readdirSync(migrations).some(name => name.includes('schema0-to-' + migrator.TARGET_SCHEMA_VERSION)));
   const legacy = new SQL.Database(original); legacy.run('PRAGMA user_version=4');
   await migrator.migrate(legacy, { dbFilePath: filename });
-  const prior = fs.readdirSync(migrations).find(name => name.includes('schema4-to-5'));
+  const prior = fs.readdirSync(migrations).find(name => name.includes('schema4-to-' + migrator.TARGET_SCHEMA_VERSION));
   assert(prior); disk = persistence.openChecked(SQL, fs.readFileSync(path.join(migrations, prior)));
   assert.equal(migrator.getSchemaVersion(disk), 4); disk.close(); legacy.close();
   const absent = new SQL.Database(original); absent.run('PRAGMA user_version=0');
   await migrator.migrate(absent, { dbFilePath: filename }); absent.close();
-  assert(fs.readdirSync(migrations).some(name => name.includes('schema5-to-5')));
+  assert(fs.readdirSync(migrations).some(name => name.includes('schema' + migrator.TARGET_SCHEMA_VERSION + '-to-' + migrator.TARGET_SCHEMA_VERSION)));
   const failing = new SQL.Database(original); failing.run('PRAGMA user_version=4');
   const rename = fs.renameSync; fs.renameSync = () => { throw new Error('Backup failed'); };
   try { await assert.rejects(migrator.migrate(failing, { dbFilePath: filename }), /Backup failed/); } finally { fs.renameSync = rename; }

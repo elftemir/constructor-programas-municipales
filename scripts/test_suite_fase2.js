@@ -15,6 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
+const vm = require('vm');
 const TEST_CATALOG = path.join(__dirname, 'fixtures/catalog-minimal.json');
 require('./generate_test_catalog');
 
@@ -83,6 +84,28 @@ async function main() {
     const builtin = models.find(m => m.id === 'builtin_local');
     assert.ok(builtin, 'Motor integrado offline presente');
     assert.strictEqual(builtin.installed, true, 'Motor integrado está disponible de serie');
+    const catalog = JSON.parse(fs.readFileSync(path.join(__dirname, '../data/ai_models.json'), 'utf8')).models;
+    for (const def of catalog) {
+      const model = models.find(m => m.id === def.id);
+      assert(model, 'Modelo oficial disponible');
+      assert.equal(model.license, 'Apache-2.0');
+      assert.equal(model.licenseUrl, 'https://huggingface.co/' + (def.baseModel || def.repoId) + '/blob/main/LICENSE');
+      assert.equal(model.licenseRestricted, false);
+    }
+    const visibleModels = await AiService.getModels();
+    const viewSource = fs.readFileSync(path.join(__dirname, '../src/renderer/js/views/aiView.js'), 'utf8');
+    for (const lang of ['es', 'ca']) {
+      const locales = JSON.parse(fs.readFileSync(path.join(__dirname, '../src/renderer/locales/' + lang + '.json')));
+      const list = { innerHTML: '' };
+      const context = vm.createContext({ window: { api: { aiGetModels: async () => visibleModels, aiGetDiagnostic: async () => ({}), onAiDownloadProgress: () => () => {} }, i18n: { t: key => key.split('.').reduce((obj, name) => obj?.[name], locales) } }, document: { querySelector: () => list }, escapeHtml: value => String(value || ''), console });
+      vm.runInContext(viewSource, context);
+      await context.window.AiView.loadModels(lang === 'ca');
+      assert(list.innerHTML.includes('Apache-2.0'));
+      assert(!list.innerHTML.includes('qwen-research'));
+      assert(!list.innerHTML.includes('Qwen 2.5 3B'));
+      assert(list.innerHTML.includes('Qwen3 4B Instruct 2507'));
+      assert.equal((list.innerHTML.match(/role="note"/g) || []).length, 0, 'No se ofrece ningún modelo con licencia restringida');
+    }
   });
 
   await runAsyncTest('Motor integrado responde a pruebas de autodiagnóstico sin descargas', async () => {
@@ -103,7 +126,7 @@ async function main() {
       codigo_ine: '08196',
       organizacion: 'En Comú Podem Sant Andreu de la Barca',
       partido: 'En Comú Podem',
-      lema: 'Políticas honestas y valientes',
+      lema_es: 'Políticas honestas y valientes',
       idioma_principal: 'es'
     });
     assert.ok(testProjectId && typeof testProjectId === 'string');
@@ -197,6 +220,7 @@ async function main() {
   console.log('\n[6/7] Generación de textos generales con IA');
   await runAsyncTest('Generación de carta de presentación municipal', async () => {
     const pres = await AiService.redactarPresentacion({
+      selectedMeasures:[{texto:'Ampliar la biblioteca.'},{texto:'Crear una oficina de vivienda.'},{texto:'Mejorar los parques.'}],
       municipio: 'Sant Andreu de la Barca',
       candidato: 'Mireia Hernández',
       prioridades: ['Sanidad pública', 'Vivienda asequible', 'Transición ecológica'],
@@ -211,6 +235,7 @@ async function main() {
 
   await runAsyncTest('Generación de introducción de área temática', async () => {
     const intro = await AiService.redactarIntroduccionArea({
+      selectedMeasures:[{texto:'Crear refugios climáticos.'}],
       area_nombre: 'Transición Ecológica y Medio Ambiente',
       municipio: 'Sant Andreu de la Barca',
       medidas: ['Creación de refugios climáticos', 'Instalación de placas solares en edificios públicos'],
@@ -223,9 +248,10 @@ async function main() {
 
   await runAsyncTest('Generación de texto de cierre del programa', async () => {
     const cierre = await AiService.redactarCierre({
+      selectedMeasures:[{texto:'Ampliar la biblioteca.'},{texto:'Crear una oficina de vivienda.'},{texto:'Mejorar los parques.'}],
       municipio: 'Sant Andreu de la Barca',
       candidato: 'Mireia Hernández',
-      lema: 'Políticas honestas y valientes',
+      lema_es: 'Políticas honestas y valientes',
       idioma: 'es'
     });
 

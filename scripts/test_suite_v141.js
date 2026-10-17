@@ -1,5 +1,5 @@
 /**
- * Batería de pruebas automatizadas v1.4.1 - Cierre y Estabilización de Fase 1
+ * Batería de pruebas automatizadas v1.4.1 - Validación del programa
  * 
  * Verificaciones obligatorias:
  * 1. Sincronización de versión y empaquetado (v1.4.1).
@@ -8,7 +8,7 @@
  * 4. Detección de claves no resueltas: simulación de renderizado de todas las vistas
  *    en Castellano y Catalán buscando patrones como "basic.*", "welcome.*", "sidebar.*", etc.
  * 5. Verificación de ayuda contextual discreta (sin "❓ ?").
- * 6. Base de datos SQLite y Catálogo Marco bilingüe (12 áreas, 123 medidas).
+ * 6. Base de datos SQLite y Catálogo Marco bilingüe (áreas y medidas sintéticas).
  * 7. Exportación Word (.docx) rigurosa:
  *    - Validación ZIP y estructura OOXML.
  *    - Validación estricta XML (ElementTree / sin prefijos no declarados como v:, o:, w10:).
@@ -19,13 +19,41 @@ const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
 const JSZip = require('jszip');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
+const { pathToFileURL } = require('url');
 const TEST_CATALOG = path.join(__dirname, 'fixtures/catalog-test.json');
 require('./generate_test_catalog');
 
 const { initDb, getDb } = require('../src/main/db/database');
 const docxExporter = require('../src/main/services/docxExporter');
 const projectService = require('../src/main/services/projectService');
+const pdfExporter = require('../src/main/services/pdfExporter');
+
+const scratchRoot = path.join(__dirname, '../scratch');
+fs.mkdirSync(scratchRoot, { recursive: true });
+const testDir = process.env.TEST_RUN_DIR || fs.mkdtempSync(path.join(scratchRoot, 'fase1-'));
+fs.mkdirSync(testDir, { recursive: true });
+let converters;
+async function validateDocxAndLibreOffice(docxPath) {
+  const zip = await JSZip.loadAsync(fs.readFileSync(docxPath));
+  assert(zip.file('word/document.xml'), 'El DOCX contiene el documento principal');
+  for (const part of zip.filter((name, entry) => !entry.dir && /\.(xml|rels)$/i.test(name))) {
+    docxExporter.assertWellFormed(await part.async('string'), part.name);
+  }
+  converters ||= pdfExporter.detectConverters();
+  if (!converters.libreOfficeAvailable || !converters.libreOfficePath) {
+    console.log('  - OMITIDA: LibreOffice no disponible; XML DOCX validado (' + path.basename(docxPath) + ')');
+    return null;
+  }
+  const profile = pathToFileURL(fs.mkdtempSync(path.join(testDir, 'lo-'))).href;
+  execFileSync(converters.libreOfficePath, ['-env:UserInstallation=' + profile, '--headless', '--norestore', '--convert-to', 'pdf', '--outdir', testDir, docxPath], {
+    stdio: 'pipe', timeout: 45000, windowsHide: true, shell: false
+  });
+  const pdfPath = docxPath.replace(/\.docx$/, '.pdf');
+  assert(fs.existsSync(pdfPath) && fs.statSync(pdfPath).size > 1000, 'LibreOffice genera un PDF válido');
+  return pdfPath;
+}
+function removeTestFile(filename) { if (filename && fs.existsSync(filename)) fs.unlinkSync(filename); }
 
 let totalTests = 0;
 let passedTests = 0;
@@ -68,7 +96,7 @@ async function main() {
     assert.match(pkg.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
   });
 
-  runTest('catalogo_marco.json tiene versión válida', () => {
+  runTest('catalog-test.json tiene versión válida', () => {
     const cat = JSON.parse(fs.readFileSync(TEST_CATALOG, 'utf8'));
     assert.ok(cat.version.includes('1.4.2') || cat.version.includes('2.0.0'));
   });
@@ -79,14 +107,18 @@ async function main() {
     const iconPaths = [
       path.join(__dirname, '../build/icon.ico'),
       path.join(__dirname, '../src/main/assets/icons/app_icon.ico'),
-      path.join(__dirname, '../src/renderer/assets/icons/app_icon.ico'),
-      path.join(__dirname, '../src/main/assets/icons/emblema_adaptador_municipal_programa_marco.svg'),
+      path.join(__dirname, '../src/renderer/assets/icons/app_icon_256.png'),
       path.join(__dirname, '../build/installer.nsh')
     ];
     for (const p of iconPaths) {
       assert.ok(fs.existsSync(p), `Debe existir ${p}`);
       assert.ok(fs.statSync(p).size > 100, `El archivo ${p} no debe estar vacío`);
     }
+    const png = fs.readFileSync(path.join(__dirname, '../src/renderer/assets/icons/app_icon_256.png'));
+    assert.equal(png.readUInt32BE(16), 256);
+    assert.equal(png.readUInt32BE(20), 256);
+    assert(png.length < 100000, 'El PNG de interfaz pesa menos de 100 KB');
+    assert(fs.readFileSync(iconPaths[0]).equals(fs.readFileSync(iconPaths[1])), 'Ventana e instalador conservan el mismo ICO');
 
     const nshContent = fs.readFileSync(path.join(__dirname, '../build/installer.nsh'), 'utf8');
     assert.ok(nshContent.includes('SHChangeNotify'), 'installer.nsh debe invocar SHChangeNotify para limpiar la caché de iconos');
@@ -167,6 +199,7 @@ async function main() {
   };
   const i18n = require('../src/renderer/js/i18n.js');
   global.window.i18n = i18n;
+  global.window.Lema = require('../src/main/utils/lema');
   global.window.addEventListener = () => {};
   global.window.removeEventListener = () => {};
 
@@ -212,7 +245,7 @@ async function main() {
     partido: 'Podemos',
     organizacion: 'Podemos Sant Feliu',
     idioma_principal: 'es',
-    lema: 'LA FUERZA DE TRANSFORMAR',
+    lema_es: 'LA FUERZA DE TRANSFORMAR',
     habitantes: 45000,
     poblacion_oficial: 45000,
     areas: [
@@ -222,7 +255,7 @@ async function main() {
       }
     ],
     textos_generales: { presentacion_titulo: 'Pres', presentacion_parrafos: ['P1'] },
-    stats: { decididas: 1, total_marco: 123, progreso_pct: 1, en_duda: 0, sin_revisar: 122, incluidas: 1, adaptadas: 0, medidas_propias: 0, descartadas: 0 }
+    stats: { decididas: 1, total_marco: 6, progreso_pct: 1, en_duda: 0, sin_revisar: 5, incluidas: 1, adaptadas: 0, medidas_propias: 0, descartadas: 0 }
   };
 
   function loadView(relPath, viewName) {
@@ -232,6 +265,8 @@ async function main() {
     return fn(global.window, global.document, global.App, global.escapeHtml);
   }
 
+  global.window.WritingContract = require("../src/shared/writingContract");
+  global.window.TextFormat = require("../src/shared/textFormat");
   const BasicDataView = loadView('../src/renderer/js/views/basicDataView.js', 'BasicDataView');
   const GeneralTextsView = loadView('../src/renderer/js/views/generalTextsView.js', 'GeneralTextsView');
   const ChooseMeasuresView = loadView('../src/renderer/js/views/chooseMeasuresView.js', 'ChooseMeasuresView');
@@ -293,25 +328,25 @@ async function main() {
 
   // 6. Base de Datos y Catálogo Marco
   console.log('\n[6/7] Verificación de Base de Datos y Catálogo Marco');
-  await runAsyncTest('Base de datos se inicializa con 12 áreas y 123 medidas en el marco oficial', async () => {
+  await runAsyncTest('Base de datos se inicializa con las áreas y medidas del fixture sintético', async () => {
     await getDb(path.join(process.env.TEST_RUN_DIR || path.join(__dirname, '../scratch'), 'tests-v141.sqlite'), { catalogPath: TEST_CATALOG });
     const db = await getDb();
-    const areas = db.exec("SELECT COUNT(*) FROM areas WHERE fuente_id = 'fuente_marco_oficial'")[0].values[0][0];
-    const medidas = db.exec("SELECT COUNT(*) FROM medidas WHERE fuente_id = 'fuente_marco_oficial'")[0].values[0][0];
-    assert.strictEqual(areas, 12);
-    assert.strictEqual(medidas, 123);
+    const areas = db.exec("SELECT COUNT(*) FROM areas WHERE fuente_id = 'synthetic-main-source'")[0].values[0][0];
+    const medidas = db.exec("SELECT COUNT(*) FROM medidas WHERE fuente_id = 'synthetic-main-source'")[0].values[0][0];
+    assert.strictEqual(areas, JSON.parse(fs.readFileSync(TEST_CATALOG)).areas.length);
+    assert.strictEqual(medidas, JSON.parse(fs.readFileSync(TEST_CATALOG)).areas.reduce((n,a)=>n+a.medidas.length,0));
   });
 
   // 7. Verificación de Exportación DOCX y Validación con LibreOffice
   console.log('\n[7/7] Verificación de exportación Word (.docx) y validación estructural');
-  const tempDocxEs = path.join(__dirname, 'test_export_v141_es.docx');
-  const tempDocxCa = path.join(__dirname, 'test_export_v141_ca.docx');
+  const tempDocxEs = path.join(testDir, 'test_export_v141_es.docx');
+  const tempDocxCa = path.join(testDir, 'test_export_v141_ca.docx');
 
-  await runAsyncTest('Exportar Word en Español con lema: XML válido, namespaces completos, abre en LibreOffice', async () => {
+  await runAsyncTest('Exportar Word en Español con lema_es: XML válido, namespaces completos, abre en LibreOffice', async () => {
     const projectEs = {
       ...testProject,
       idioma_principal: 'es',
-      lema: 'FUERZA MUNICIPAL'
+      lema_es: 'FUERZA MUNICIPAL'
     };
 
     const res = await docxExporter.exportProjectToDocx(projectEs, {
@@ -321,22 +356,16 @@ async function main() {
 
     assert.ok(fs.existsSync(tempDocxEs), 'El archivo exportado debe existir');
 
-    // Validar con LibreOffice Writer
-    const loCmd = `"${'C:\\Program Files\\LibreOffice\\program\\soffice.exe'}" --headless --convert-to pdf --outdir "${__dirname}" "${tempDocxEs}"`;
-    execSync(loCmd, { stdio: 'pipe' });
-    const pdfPath = tempDocxEs.replace(/\.docx$/, '.pdf');
-    assert.ok(fs.existsSync(pdfPath), 'LibreOffice debe convertir el DOCX a PDF sin errores');
-
-    // Limpieza
-    fs.unlinkSync(tempDocxEs);
-    fs.unlinkSync(pdfPath);
+    const pdfPath = await validateDocxAndLibreOffice(tempDocxEs);
+    removeTestFile(tempDocxEs);
+    removeTestFile(pdfPath);
   });
 
-  await runAsyncTest('Exportar Word en Catalán sin lema: XML válido, cuadros limpios, abre en LibreOffice', async () => {
+  await runAsyncTest('Exportar Word en Catalán sin lema catalán: XML válido, cuadros limpios, abre en LibreOffice', async () => {
     const projectCa = {
       ...testProject,
       idioma_principal: 'ca',
-      lema: '' // Sin lema
+      lema_es: '' // Sin lema
     };
 
     const res = await docxExporter.exportProjectToDocx(projectCa, {
@@ -346,15 +375,9 @@ async function main() {
 
     assert.ok(fs.existsSync(tempDocxCa), 'El archivo exportado debe existir');
 
-    // Validar con LibreOffice Writer
-    const loCmd = `"${'C:\\Program Files\\LibreOffice\\program\\soffice.exe'}" --headless --convert-to pdf --outdir "${__dirname}" "${tempDocxCa}"`;
-    execSync(loCmd, { stdio: 'pipe' });
-    const pdfPath = tempDocxCa.replace(/\.docx$/, '.pdf');
-    assert.ok(fs.existsSync(pdfPath), 'LibreOffice debe convertir el DOCX en catalán sin errores');
-
-    // Limpieza
-    fs.unlinkSync(tempDocxCa);
-    fs.unlinkSync(pdfPath);
+    const pdfPath = await validateDocxAndLibreOffice(tempDocxCa);
+    removeTestFile(tempDocxCa);
+    removeTestFile(pdfPath);
   });
 
   await runAsyncTest('Exportar Word con Presentación VACÍA en ES y CA: sección omitida, sin página vacía, sin texto inventado', async () => {
@@ -369,8 +392,8 @@ async function main() {
       }
     };
 
-    const docxEmptyEs = path.join(__dirname, 'test_empty_pres_es.docx');
-    const docxEmptyCa = path.join(__dirname, 'test_empty_pres_ca.docx');
+    const docxEmptyEs = path.join(testDir, 'test_empty_pres_es.docx');
+    const docxEmptyCa = path.join(testDir, 'test_empty_pres_ca.docx');
 
     await docxExporter.exportProjectToDocx(emptyPresProj, { outputPath: docxEmptyEs, idioma: 'es' });
     await docxExporter.exportProjectToDocx(emptyPresProj, { outputPath: docxEmptyCa, idioma: 'ca' });
@@ -385,16 +408,9 @@ async function main() {
     assert.ok(!xmlCa.includes('Presentació'), 'En CA: NO debe aparecer el título "Presentació" si no hay contenido');
     assert.ok(!xmlCa.includes('En Comú Podem'), 'En CA: NO debe aparecer texto inventado del catálogo');
 
-    // Validar ambos con LibreOffice
-    const loCmd1 = `"${'C:\\Program Files\\LibreOffice\\program\\soffice.exe'}" --headless --convert-to pdf --outdir "${__dirname}" "${docxEmptyEs}"`;
-    const loCmd2 = `"${'C:\\Program Files\\LibreOffice\\program\\soffice.exe'}" --headless --convert-to pdf --outdir "${__dirname}" "${docxEmptyCa}"`;
-    execSync(loCmd1, { stdio: 'pipe' });
-    execSync(loCmd2, { stdio: 'pipe' });
-
-    fs.unlinkSync(docxEmptyEs);
-    fs.unlinkSync(docxEmptyEs.replace(/\.docx$/, '.pdf'));
-    fs.unlinkSync(docxEmptyCa);
-    fs.unlinkSync(docxEmptyCa.replace(/\.docx$/, '.pdf'));
+    const pdfEmptyEs = await validateDocxAndLibreOffice(docxEmptyEs);
+    const pdfEmptyCa = await validateDocxAndLibreOffice(docxEmptyCa);
+    for (const file of [docxEmptyEs, docxEmptyCa, pdfEmptyEs, pdfEmptyCa]) removeTestFile(file);
   });
 
   console.log('\n====================================================');

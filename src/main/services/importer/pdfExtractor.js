@@ -2,6 +2,7 @@ const pdfParse = require('pdf-parse');
 const structuralClassifier = require('./structuralClassifier');
 
 class PdfExtractor {
+  structurePages(pages){return require('./pdfLayout').structure(pages);}
   async extract(buffer) {
     try {
       const data = await pdfParse(buffer);
@@ -43,7 +44,7 @@ class PdfExtractor {
     for (let i = 0; i < rawLines.length; i++) {
       const line = rawLines[i];
       const isShortHeader = line.length <= 65 && (/^[A-ZÁÉÍÓÚÀÈÒÇ0-9\s]{4,65}$/.test(line) || /^[0-9]{1,2}\.[\s\t]+[A-Z]/.test(line));
-      const isListOrNum = /^[\-•\*\–]\s+/.test(line) || /^[0-9]+(?:\.[0-9]+)*[\.\:\-\)]\s+/.test(line);
+      const isListOrNum = require('./pdfLayout').bullet.test(line) || /^[0-9]+(?:\.[0-9]+)*[\.\:\-\)]\s+/.test(line);
 
       blocks.push({
         index: blocks.length,

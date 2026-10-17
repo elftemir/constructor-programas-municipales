@@ -1,3 +1,4 @@
+const { getLema, normalizeLema } = require('../utils/lema');
 const fs = require('fs');
 const path = require('path');
 const { getDb, save } = require('../db/database');
@@ -82,9 +83,8 @@ async function saveFichaMunicipio(data) {
     ? (data.mandato !== null ? data.mandato : '2027–2031')
     : (existing ? existing.mandato : '2027–2031');
 
-  const lema = data.lema !== undefined
-    ? (data.lema !== null && data.lema !== '' ? String(data.lema).trim().slice(0, 60) : null)
-    : (existing ? existing.lema : null);
+  const lema_es = normalizeLema(data.lema_es !== undefined ? data.lema_es : getLema(existing, 'es'));
+  const lema_ca = normalizeLema(data.lema_ca !== undefined ? data.lema_ca : getLema(existing, 'ca'));
 
   const fecha_electoral = data.fecha_electoral !== undefined
     ? (data.fecha_electoral !== null && data.fecha_electoral !== '' ? data.fecha_electoral : null)
@@ -118,11 +118,11 @@ async function saveFichaMunicipio(data) {
     INSERT OR REPLACE INTO fichas_municipios (
       codigo_ine, municipio, provincia, comunidad_autonoma,
       poblacion_oficial, poblacion_usuario, fuente_poblacion, ano_poblacion,
-      partido, organizacion, mandato, lema, fecha_electoral,
+      partido, organizacion, mandato, lema_es, lema_ca, fecha_electoral,
       presupuesto_municipal, presupuesto_inversiones,
       empresas_municipales_json, servicios_json,
       logo_path, logo_filename, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     data.codigo_ine,
     municipio,
@@ -135,7 +135,8 @@ async function saveFichaMunicipio(data) {
     partido,
     organizacion,
     mandato,
-    lema,
+    lema_es,
+    lema_ca,
     fecha_electoral,
     presupuesto_municipal,
     presupuesto_inversiones,

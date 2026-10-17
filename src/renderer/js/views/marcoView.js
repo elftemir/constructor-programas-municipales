@@ -51,11 +51,10 @@ const MarcoView = {
         </div>
       `;
       container.querySelector('#btn-marco-empty-check')?.addEventListener('click', () => {
-        App.navigateTo('configuracion');
-        setTimeout(() => document.querySelector('#btn-check-content-updates')?.click(), 150);
+        App.openContentManager();
       });
       container.querySelector('#btn-marco-empty-sources')?.addEventListener('click', () => {
-        App.navigateTo('fuentes-programa');
+        App.navigateTo('fuentes');
       });
       return;
     }
@@ -110,7 +109,7 @@ const MarcoView = {
         </div>
       </div>
 
-      <!-- Barra de pestañas horizontales de las 12 áreas -->
+      <!-- Barra de pestañas horizontales de las áreas -->
       <div class="tabs-wrap">
         <button class="tab-nav-arrow" id="btn-marco-prev" aria-label="Anterior">‹</button>
         <div class="tabs-scroll-container" id="tabs-scroll-marco">
@@ -133,7 +132,7 @@ const MarcoView = {
           <input type="text" class="input" id="input-search-marco" placeholder="${isCa ? `Cercar a ${escapeHtml(areaName)}…` : `Buscar en ${escapeHtml(areaName)}…`}" value="${escapeHtml(this.searchQuery)}">
         </div>
         <span class="muted" style="margin-left: auto;">
-          ${measures.length} ${isCa ? 'mesures en aquesta àrea (Total marc: 123)' : 'medidas en este área (Total marco: 123)'}
+          ${measures.length} ${isCa ? 'mesures en aquesta àrea ' : 'medidas en este área '}
         </span>
       </div>
 
@@ -186,7 +185,7 @@ const MarcoView = {
       <!-- Preparación arquitectónica Fase 2: Estados de traducción -->
       <div class="card" style="padding: 20px; background: #faf5ff; border: 1px solid #e9d5ff; margin-bottom: 24px;">
         <div style="font-weight: 700; font-size: 14px; color: #6b21a8; margin-bottom: 6px;">
-          ${isCa ? 'Arquitectura de traducció i importació multillengua (Fase 2):' : 'Arquitectura de traducción e importación multilenguaje (Fase 2):'}
+          ${isCa ? 'Traducció i importació bilingüe:' : 'Traducción e importación bilingüe:'}
         </div>
         <div style="font-size: 13px; color: #4b5563; line-height: 1.6;">
           ${isCa

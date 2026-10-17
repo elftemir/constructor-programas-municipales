@@ -23,14 +23,14 @@ function up(db, { addColumnIfNotExists, tableExists }) {
   `);
 
   // 2. Columnas en areas y medidas para fuentes
-  addColumnIfNotExists(db, 'areas', "fuente_id TEXT DEFAULT 'fuente_marco_oficial'");
-  addColumnIfNotExists(db, 'medidas', "fuente_id TEXT DEFAULT 'fuente_marco_oficial'");
+  addColumnIfNotExists(db, 'areas', 'fuente_id TEXT');
+  addColumnIfNotExists(db, 'medidas', 'fuente_id TEXT');
   addColumnIfNotExists(db, 'medidas', "subarea TEXT");
   addColumnIfNotExists(db, 'medidas', "numero_origen TEXT");
   addColumnIfNotExists(db, 'medidas', "pagina_origen INTEGER");
 
   // 3. Columna fuente_id en proyectos
-  addColumnIfNotExists(db, 'proyectos', "fuente_id TEXT DEFAULT 'fuente_marco_oficial'");
+  addColumnIfNotExists(db, 'proyectos', 'fuente_id TEXT');
 
   // 4. Tabla de relaciones de múltiples fuentes por proyecto
   db.run(`
@@ -51,31 +51,21 @@ function up(db, { addColumnIfNotExists, tableExists }) {
   addColumnIfNotExists(db, 'medidas_propias', "numero_origen TEXT");
   addColumnIfNotExists(db, 'medidas_propias', "fuente_nombre TEXT");
 
-  // 6. Normalización idempotente de fuentes vacías en datos existentes
-  db.run(`
-    UPDATE areas SET fuente_id = 'fuente_marco_oficial' WHERE fuente_id IS NULL OR fuente_id = '';
-    UPDATE medidas SET fuente_id = 'fuente_marco_oficial' WHERE fuente_id IS NULL OR fuente_id = '';
-    UPDATE proyectos SET fuente_id = 'fuente_marco_oficial' WHERE fuente_id IS NULL OR fuente_id = '';
-  `);
-
-  // 7. Asegurar fuente oficial en programas_fuente
-  db.run(`
-    INSERT OR IGNORE INTO programas_fuente (
-      id, nombre, activo, archivado, tipo, origen_archivo, idiomas_json, total_areas, total_medidas, created_at, updated_at
-    ) VALUES (
-      'fuente_marco_oficial',
-      'Programa Marco 2027',
-      1,
-      0,
-      'marco_oficial',
-      'catalogo_marco.json',
-      '{"es":{"disponible":true},"ca":{"disponible":true}}',
-      12,
-      123,
-      datetime('now'),
-      datetime('now')
-    );
-  `);
+  // Preserve pre-source-schema data under a neutral legacy source, only when it exists.
+  const hasLegacy = ['areas', 'medidas', 'proyectos'].some(table =>
+    db.exec(`SELECT 1 FROM ${table} WHERE fuente_id IS NULL OR fuente_id = '' LIMIT 1`).length > 0);
+  if (hasLegacy) {
+    const legacyId = 'source_legacy_import';
+    for (const table of ['areas', 'medidas', 'proyectos']) {
+      db.run(`UPDATE ${table} SET fuente_id = ? WHERE fuente_id IS NULL OR fuente_id = ''`, [legacyId]);
+    }
+    db.run(`INSERT OR IGNORE INTO programas_fuente
+      (id,nombre,activo,archivado,tipo,idiomas_json,total_areas,total_medidas,created_at,updated_at)
+      SELECT ?, 'Programa fuente conservado', 1, 0, 'legacy', '{}',
+        (SELECT COUNT(*) FROM areas WHERE fuente_id = ?),
+        (SELECT COUNT(*) FROM medidas WHERE fuente_id = ?), datetime('now'), datetime('now')`,
+      [legacyId, legacyId, legacyId]);
+  }
 }
 
 module.exports = {

@@ -29,8 +29,8 @@ const ChooseMeasuresView = {
     } catch (err) {
       console.warn('Error al cargar fuentes del proyecto:', err);
       this.projectSources = [{
-        id: project.fuente_id || 'fuente_marco_oficial',
-        nombre: 'Programa Marco 2027',
+        id: project.fuente_id || null,
+        nombre: window.i18n.t('clean_start.no_active'),
         rol: 'principal',
         esPrincipal: true
       }];
@@ -40,7 +40,7 @@ const ChooseMeasuresView = {
     const principalSource = this.projectSources.find(f => f.esPrincipal) || this.projectSources[0];
 
     if (!this.currentSourceId || !this.projectSources.find(f => f.id === this.currentSourceId)) {
-      this.currentSourceId = principalSource ? principalSource.id : (project.fuente_id || 'fuente_marco_oficial');
+      this.currentSourceId = principalSource ? principalSource.id : (project.fuente_id || null);
     }
 
     const isComplementary = principalSource && this.currentSourceId !== principalSource.id;
@@ -133,7 +133,7 @@ const ChooseMeasuresView = {
           <div class="muted" style="text-align: right; font-size: 13px;">
             <div>${isCa ? 'Progrés global' : 'Progreso global'}: <b>${project.stats?.progreso_pct || 0}%</b></div>
             <div style="font-size: 12px; margin-top: 2px;">
-              ${project.stats?.decididas || 0}/${project.stats?.total_marco || 123} ${isCa ? 'decidides' : 'decididas'}
+              ${project.stats?.decididas || 0}/${project.stats?.total_marco ?? 0} ${isCa ? 'decidides' : 'decididas'}
             </div>
           </div>
         </div>

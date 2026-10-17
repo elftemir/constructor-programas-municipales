@@ -16,7 +16,7 @@
     <!-- Top Header -->
     <header class="top-bar">
       <div class="brand" id="nav-brand" title="Volver al inicio" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-        <img src="assets/icons/emblema_adaptador_municipal_programa_marco.png" alt="Podemos" style="width: 24px; height: 24px; object-fit: contain; border-radius: 4px;" />
+        <img src="assets/icons/app_icon_256.png" alt="Podemos" style="width: 24px; height: 24px; object-fit: contain; border-radius: 4px;" />
         <span>Podemos</span>
         <span style="font-weight: 400; color: var(--text-secondary);">·</span>
         <span id="nav-brand-title">Constructor municipal</span>
@@ -27,11 +27,16 @@
       <div class="save-indicator saved" id="top-save-indicator" style="display: none;">
         <span>✓</span> <span>Guardado</span>
       </div>
+      <button class="btn small link" id="generation-engine-indicator" type="button"></button>
       <div class="top-actions" id="top-actions" style="display: none;">
         <button class="btn small" id="btn-quick-save" title="Guardar ahora (Ctrl+S)">Guardar</button>
         <button class="btn small link" id="btn-close-project" title="Volver al menú de proyectos">Cerrar proyecto</button>
       </div>
     </header>
+    <div class="generation-notices">
+      <aside id="generation-banner" class="generation-banner" role="status" aria-live="polite" hidden></aside>
+      <aside id="retired-model-banner" class="generation-banner" role="status" aria-live="polite" hidden></aside>
+    </div>
 
     <!-- Sidebar Navigation -->
     <aside class="sidebar">
@@ -95,6 +100,12 @@
 
   <!-- Scripts -->
   <script src="js/i18n.js"></script>
+  <script src="../main/utils/lema.js"></script>
+  <script src="../shared/writingContract.js"></script>
+  <script src="../shared/writingWarnings.js"></script>
+  <script src="../shared/textFormat.js"></script>
+  <script src="js/utils/lemaUi.js"></script>
+  <script src="js/utils/generationUi.js"></script>
   <script src="js/tutorial.js"></script>
   <script src="js/utils/aiModalHelper.js"></script>
   <script src="js/views/homeView.js"></script>

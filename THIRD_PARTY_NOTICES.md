@@ -105,3 +105,54 @@ Dependencias transitivas empaquetadas:
 - @napi-rs/canvas-win32-x64-msvc 1.0.11: MIT
 
 El binario de canvas incorpora bibliotecas adicionales, incluidas componentes con MPL-2.0, BSD, FTL, ICU y Zlib. Se distribuye su SBOM original en ocr-runtime/node_modules/@napi-rs/canvas-win32-x64-msvc/sbom.cdx.json y los avisos y fuentes correspondientes en ocr-runtime/licenses/. No se incorpora un motor OCR AGPL.
+## Modelos de IA descargables
+
+Verificado el 12/10/2026 en las fichas y archivos LICENSE oficiales de Qwen en Hugging Face. Los usuarios descargan estos modelos opcionales directamente desde Hugging Face; los pesos GGUF no se distribuyen con el programa ni con el código fuente. La licencia de la aplicación no sustituye la licencia de cada modelo.
+
+| Modelo | Licencia | Texto oficial |
+|---|---|---|
+| Qwen 2.5 1.5B Instruct | Apache License 2.0 (`Apache-2.0`) | [LICENSE](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/blob/main/LICENSE) |
+| Qwen 2.5 0.5B Instruct (Ultra ligero) | Apache License 2.0 (`Apache-2.0`) | [LICENSE](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/blob/main/LICENSE) |
+| Qwen3 4B Instruct 2507 (GGUF Q4_K_M de Unsloth) | Apache-2.0 | [LICENSE del modelo original](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/blob/main/LICENSE) |
+
+Todos los modelos ofrecidos tienen licencia Apache-2.0. El GGUF Qwen3 4B procede de Unsloth, revisión fijada y hash SHA-256 verificado; el modelo original de Qwen funciona sin modo de pensamiento.
+
+La 3.8.0 incluye los backends oficiales CPU y Vulkan de llama.cpp/ggml b11476 con licencia MIT y sus avisos existentes. CUDA no se incluye; queda como posible ampliación. OpenMP mantiene su licencia LLVM con excepciones.
+
+## Detección local de idioma
+
+franc 6.2.0, trigram-utils 2.0.1, n-gram 2.0.2 — MIT, Titus Wormer. [Código y licencia](https://github.com/wooorm/franc). La identificación estadística de párrafos es una comprobación defensiva y no garantiza gramática perfecta; no transmite textos ni consulta servicios externos. Los perfiles lingüísticos proceden de la Declaración Universal de los Derechos Humanos indicada por el proveedor, no de Programas Marco.
+
+(The MIT License)
+
+Copyright (c) 2014 Titus Wormer <tituswormer@gmail.com>
+Copyright (c) 2008 Kent S Johnson
+Copyright (c) 2006 Jacob R Rideout <kde@jacobrideout.net>
+Copyright (c) 2004 Maciej Ceglowski
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+'Software'), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+## Ortografía local ES/CA (3.8.5)
+- dictionary-ca 3.0.0, datos del corrector catalán 3.0.8 (Jaume Ortolà, Joan Moratinos y colaboradores). Su archivo license permite GPL-2.0-or-later o LGPL-2.1-or-later. Se elige GPL-3.0, permitida por la opción «or later», compatible con GPL-3.0-or-later del programa. https://github.com/wooorm/dictionaries/tree/main/dictionaries/ca
+- dictionary-es 4.0.0, diccionario es_ES 2.8 de RLA-ES y colaboradores: GPL-3.0-or-later, LGPL-3.0-or-later o MPL-1.1-or-later. Se elige GPL-3.0-or-later. https://github.com/wooorm/dictionaries/tree/main/dictionaries/es
+- hunspell-wasm 0.3.0, port de Hunspell de Rotem Dan. Se conserva el código del wrapper y las licencias incluidas; se distribuye bajo la opción LGPL-2.1 (COPYING.LESSER), compatible con este programa. https://github.com/rotemdan/hunspell-wasm
+Los diccionarios completos .aff/.dic y el WASM se instalan como dependencias fijadas en package-lock.json; se leen localmente, sin enviar textos ni descargar recursos al corregir. Licencias reproducidas en src/main/assets/orthography-licenses. No se usa nspell: su expansión del diccionario catalán no terminó dentro del tiempo de la prueba.
+- pdf-lib 1.17.1 (MIT) se utiliza únicamente como herramienta de desarrollo para generar PDF de lectura del paquete de contenido a partir de DOCX. No entra en el instalador. https://github.com/Hopding/pdf-lib

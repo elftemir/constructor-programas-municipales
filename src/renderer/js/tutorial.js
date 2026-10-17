@@ -40,7 +40,7 @@ const Tutorial = {
         <div class="modal-dialog" style="max-width: 660px; padding: 30px; border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);">
           <div style="text-align: center; margin-bottom: 20px;">
             <div style="display: flex; justify-content: center; margin-bottom: 12px;">
-              <img src="assets/icons/emblema_adaptador_municipal_programa_marco.png" alt="Logo" style="width: 52px; height: 52px; object-fit: contain;" />
+              <img src="assets/icons/app_icon_256.png" alt="Logo" style="width: 52px; height: 52px; object-fit: contain;" />
             </div>
             <h2 class="section-title" style="font-size: 22px; color: var(--action-primary); margin-bottom: 6px;">
               ${window.i18n.t('welcome.title')}
@@ -145,8 +145,8 @@ const Tutorial = {
         selector: '#nav-areas-medidas',
         title: isCa ? '4. Àrees i mesures' : '4. Áreas y medidas',
         content: isCa
-          ? 'Fluxe de treball per a les 12 àrees. Llegeix el text complet de cada proposta i tria directament entre Inclosa o En dubte.'
-          : 'Flujo de trabajo para las 12 áreas. Lee el texto completo de cada propuesta y elige directamente entre Incluida o En duda.'
+          ? 'Fluxe de treball per a les àrees. Llegeix el text complet de cada proposta i tria directament entre Inclosa o En dubte.'
+          : 'Flujo de trabajo para las áreas. Lee el texto completo de cada propuesta y elige directamente entre Incluida o En duda.'
       },
       {
         selector: '#nav-textos-generales',
@@ -414,8 +414,8 @@ const Tutorial = {
             selector: '#btn-tab-intros',
             title: isCa ? 'Pestanya Introduccions d\'àrees' : 'Pestaña Introducciones de áreas',
             content: isCa
-              ? 'Permet personalitzar la introducció pedagògica de cadascuna de les 12 àrees temàtiques del programa.'
-              : 'Permite personalizar la introducción pedagógica de cada una de las 12 áreas temáticas del programa.'
+              ? 'Permet personalitzar la introducció pedagògica de cadascuna de les àrees temàtiques del programa.'
+              : 'Permite personalizar la introducción pedagógica de cada una de las áreas temáticas del programa.'
           },
           {
             selector: '#select-intro-area',
@@ -562,8 +562,8 @@ const Tutorial = {
             selector: '.view-header',
             title: isCa ? 'Catàleg marc de referència' : 'Catálogo marco de referencia',
             content: isCa
-              ? 'Consulta l\'estructura íntegra de les 12 àrees i 123 mesures del programa de Podem Catalunya.'
-              : 'Consulta la estructura íntegra de las 12 áreas y 123 medidas del programa de Podem Catalunya.'
+              ? 'Consulta l\'estructura íntegra de les àrees i mesures del programa font seleccionat.'
+              : 'Consulta la estructura íntegra de las áreas y medidas del programa fuente seleccionado.'
           },
           {
             selector: '#marco-lang-toggle, .lang-toggle-btn',

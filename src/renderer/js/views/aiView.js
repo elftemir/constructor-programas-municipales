@@ -54,6 +54,31 @@ const AiView = {
   eventsBound: false,
   activeTestMode: 'adaptar_medida',
   currentDiagnostic: null,
+  backendUnsubscribe: null,
+
+  async loadBackendControls(container) {
+    if(!window.api.aiBackendState)return;
+    const t=key=>window.i18n.t(key);
+    container.innerHTML+=`<section class="card" id="ai-backend-settings" style="margin-top:20px;padding:20px;">
+      <h2>${t('gpu.title')}</h2><label for="ai-backend-mode">${t('gpu.processing')}</label>
+      <select id="ai-backend-mode"><option value="auto">${t('gpu.auto')}</option><option value="cpu">${t('gpu.cpu')}</option><option value="gpu">${t('gpu.gpu')}</option></select>
+      <p id="ai-backend-status" role="status" aria-live="polite"></p><button class="btn" id="ai-backend-redetect">${t('gpu.redetect')}</button></section>`;
+    const display=state=>{
+      const mode=container.querySelector('#ai-backend-mode'),status=container.querySelector('#ai-backend-status');
+      if(mode)mode.value=state.mode||'auto';
+      if(status){let text=state.backend==='gpu'?t('gpu.gpu')+' · '+(state.device?.name||''):t('gpu.cpu');
+        if(state.failed||state.status==='gpu-failed')text+=' · '+t('gpu.failure')+(state.failure?' — '+state.failure:'');
+        else if(state.fallbackReason==='GPU_BELOW_SPEED_THRESHOLD')text+=' · '+t('gpu.speedReason');
+        else if(state.fallbackReason==='NO_COMPATIBLE_GPU')text+=' · '+t('gpu.noCompatibleReason');
+        if(['detecting','benchmarking'].includes(state.status))text+=' · '+t('gpu.detecting');
+        if(state.cpuTokensPerSecond)text+=' · CPU '+Number(state.cpuTokensPerSecond).toFixed(1)+' tokens/s';
+        if(state.gpuTokensPerSecond)text+=' · GPU '+Number(state.gpuTokensPerSecond).toFixed(1)+' tokens/s';status.textContent=text;}
+    };
+    display(await window.api.aiBackendState());
+    this.backendUnsubscribe?.();this.backendUnsubscribe=window.api.onAiBackendState?.(display);
+    container.querySelector('#ai-backend-mode')?.addEventListener('change',async event=>display(await window.api.aiBackendState({mode:event.target.value})));
+    container.querySelector('#ai-backend-redetect')?.addEventListener('click',async()=>display(await window.api.aiBackendRedetect()));
+  },
 
   async render(container) {
     const isCa = window.i18n && window.i18n.getLang() === 'ca';
@@ -301,7 +326,7 @@ const AiView = {
 
               <pre id="model-json-template" style="background: #1e293b; color: #f1f5f9; padding: 14px; border-radius: 6px; font-size: 12px; overflow-x: auto; font-family: monospace;">[
   {
-    "id": "modelo-personalizado-3b",
+    "id": "modelo-personalizado",
     "name": "Nombre del modelo",
     "description": "Descripción funcional del modelo para redacción municipal.",
     "provider": "huggingface",
@@ -322,6 +347,7 @@ const AiView = {
       </div>
     `;
 
+    await this.loadBackendControls(container);
     await this.loadSpecs(isCa);
     await this.loadModels(isCa);
     this.bindEvents(isCa);
@@ -359,11 +385,13 @@ const AiView = {
 
       if (serverBox) {
         const isRunning = !!(diag && (diag.serverRunning || (diag.serverStatus && diag.serverStatus.isRunning)));
-        const isReady = !!(diag && (diag.serverReady || diag.modelAvailable));
+        const isReady = !!diag?.serverReady;
         const serverPort = diag?.port || diag?.serverPort || 55683;
         const serverPid = diag?.pid || diag?.serverPid || '--';
-        const modelName = diag?.modelName || (diag?.activeModelId === 'qwen2.5-3b-instruct-q4' ? 'Qwen 2.5 3B Instruct' : diag?.activeModelId) || 'Qwen 2.5 3B Instruct';
-        const runtimePath = diag?.runtimePath || 'resources\\ai-runtime\\llama.cpp\\llama-server.exe';
+        const modelName = diag?.modelName || diag?.modelId || (isCa ? 'Cap model seleccionat' : 'Ningún modelo seleccionado');
+        const runtimePath = isRunning ? diag?.runtimePath : (isCa ? 'Cap servidor en execució' : 'Ningún servidor en ejecución');
+        const backendLabel = isRunning ? (diag.backend === 'gpu' ? 'Vulkan' : 'CPU') : (isCa ? 'En espera' : 'En espera');
+        const deviceLabel = diag?.device?.name || (typeof diag?.device === 'string' ? diag.device : '') || '—';
 
         let estadoLabel = isReady ? (isCa ? 'Llest' : 'Listo') : (isRunning ? (isCa ? 'En execució' : 'En ejecución') : (isCa ? 'En espera (sota demanda)' : 'En espera (bajo demanda)'));
         let dotColor = (isReady || isRunning) ? '#16a34a' : '#64748b';
@@ -383,7 +411,8 @@ const AiView = {
               ${isRunning ? `<span class="badge" style="background: #dcfce7; color: #166534; font-weight: 700;">127.0.0.1:${serverPort} · PID: ${serverPid}</span>` : ''}
             </div>
             <div style="font-size: 11px; color: #64748b; font-family: monospace; word-break: break-all;">
-              <strong>${isCa ? 'Ruta runtime:' : 'Ruta runtime:'}</strong> ${runtimePath}
+              <strong>${isCa ? 'Motor actiu:' : 'Motor activo:'}</strong> ${backendLabel} · <strong>${isCa ? 'Dispositiu:' : 'Dispositivo:'}</strong> ${escapeHtml(deviceLabel)} · <strong>${isCa ? 'Capes en GPU:' : 'Capas en GPU:'}</strong> ${Number(diag?.gpuLayers)||0}<br>
+              <strong>${isCa ? 'Ruta del servidor:' : 'Ruta del servidor:'}</strong> ${escapeHtml(runtimePath||'—')}
             </div>
           </div>
         `;
@@ -392,6 +421,7 @@ const AiView = {
       }
 
       if (recBox) {
+        this.recommendedModelId=specs.recommendedModelId;
         const recoText = isCa ? (specs.recomendacionCa || specs.recomendacion) : specs.recomendacion;
         recBox.innerHTML = `<strong>${isCa ? 'Diagnòstic del sistema:' : 'Diagnóstico del sistema:'}</strong> ${recoText}`;
       }
@@ -422,7 +452,7 @@ const AiView = {
       listEl.innerHTML = models.map(m => {
         const mb = Math.round(m.tamano_bytes / 1000000);
         const isInstalled = !!m.instalado;
-        const isRec = !!m.recomendado;
+        const isRec = m.id===this.recommendedModelId;
         const isActive = isInstalled && (m.id === activeModelId);
 
         return `
@@ -437,8 +467,13 @@ const AiView = {
                   ${isInstalled ? `<span class="badge" style="background: #bbf7d0; color: #166534; font-weight: 700; font-size: 11px;">✓ ${isCa ? 'Instal·lat' : 'Instalado'}</span>` : `<span class="badge" style="background: #f1f5f9; color: #64748b; font-size: 11px;">⚪ ${isCa ? 'No descarregat' : 'No descargado'}</span>`}
                 </div>
                 <p style="margin: 6px 0 0 0; font-size: 13px; line-height: 1.45; color: var(--text-secondary);">
-                  ${escapeHtml(m.descripcion)}
+                  ${escapeHtml(isCa ? (m.descripcionCa || m.descripcion) : m.descripcion)}
                 </p>
+                <div style="margin-top: 8px; font-size: 12px;">
+                  ${window.i18n.t('ai.license_label')}: <strong>${escapeHtml(m.license || window.i18n.t('ai.license_unknown'))}</strong>
+                  ${m.licenseUrl ? `<button type="button" class="btn small btn-model-license" data-url="${escapeHtml(m.licenseUrl)}">${window.i18n.t('ai.license_read')}</button>` : ''}
+                </div>
+                ${m.licenseRestricted ? `<div role="note" style="margin-top: 8px; padding: 10px; border: 1px solid #f59e0b; background: #fffbeb; color: #92400e; font-size: 12.5px; font-weight: 600;">${m.license === 'qwen-research' ? window.i18n.t('ai.license_qwen_research_warning') : window.i18n.t('ai.license_restricted_warning')}</div>` : ''}
                 ${m.archivo_gguf ? `<div style="margin-top: 4px; font-size: 11.5px; color: #64748b; font-family: monospace;">${escapeHtml(m.archivo_gguf)}</div>` : ''}
               </div>
 
@@ -467,7 +502,7 @@ const AiView = {
             <div id="progress-box-${m.id}" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0;">
               <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;">
                 <span id="progress-phase-badge-${m.id}" class="badge" style="background: #ede9fe; color: #6d28d9; font-weight: 700; font-size: 11px;">
-                  ${isCa ? 'Fase 1/12: Iniciant…' : 'Fase 1/12: Iniciando…'}
+                  ${isCa ? 'Paso 1/12: Iniciant…' : 'Paso 1/12: Iniciando…'}
                 </span>
                 <span id="progress-pct-${m.id}" style="font-weight: 700; color: #4338ca;">0%</span>
               </div>
@@ -503,7 +538,7 @@ const AiView = {
         if (pct) pct.textContent = `${percent || 0}%`;
 
         if (phaseBadge && phase) {
-          phaseBadge.textContent = `${isCa ? 'Fase' : 'Fase'} ${phase}/12: ${phaseName || ''}`;
+          phaseBadge.textContent = `${isCa ? 'Pas' : 'Paso'} ${phase}/12: ${phaseName || ''}`;
         }
 
         const curMb = downloadedBytes ? (downloadedBytes / 1000000).toFixed(1) : '0';
@@ -513,7 +548,7 @@ const AiView = {
 
         if (txt) {
           if (message) {
-            txt.textContent = `${message} (${curMb}/${totMb} MB, ${speedMb} MB/s, ETA: ${etaStr})`;
+            txt.textContent = `${message.replace(/^FASE\s*/i,isCa?'Pas ':'Paso ')} (${curMb}/${totMb} MB, ${speedMb} MB/s, ETA: ${etaStr})`;
           } else {
             txt.textContent = `${curMb} / ${totMb} MB (${speedMb} MB/s, ETA: ${etaStr})`;
           }
@@ -538,6 +573,12 @@ const AiView = {
 
     // Actualizar diagnóstico
     document.addEventListener('click', async (e) => {
+      const btnLicense = e.target.closest('.btn-model-license');
+      if (btnLicense) {
+        const opened = await window.api.openExternalUrl(btnLicense.dataset.url);
+        if (!opened) alert(window.i18n.t('ai.license_link_blocked'));
+        return;
+      }
       const btnRefresh = e.target.closest('#btn-refresh-diagnostic');
       if (btnRefresh) {
         btnRefresh.disabled = true;
@@ -611,7 +652,7 @@ const AiView = {
         const phaseBadge = document.getElementById(`progress-phase-badge-${modelId}`);
 
         if (progBox) progBox.style.display = 'block';
-        if (phaseBadge) phaseBadge.textContent = isCa ? 'Fase 1/12: Validació…' : 'Fase 1/12: Validación…';
+        if (phaseBadge) phaseBadge.textContent = isCa ? 'Paso 1/12: Validació…' : 'Paso 1/12: Validación…';
         if (txt) txt.textContent = isCa ? 'Connectant amb el servidor de descàrrega…' : 'Conectando con el servidor de descarga…';
         if (bar) bar.style.width = '3%';
         if (pct) pct.textContent = '…';
@@ -782,10 +823,10 @@ const AiView = {
 
         // Dispatcher explícito (Sección 3.1)
         const actions = {
-          sugerir_titulos: (p) => window.api.aiSuggestTitles(p),
-          adaptar_medida: (p) => window.api.aiAdaptMeasure(p),
-          traduccion: (p) => window.api.aiTranslateText(p),
-          presentacion: (p) => window.api.aiDraftPresentation(p)
+          sugerir_titulos: (p) => (window.GenerationApi || window.api).aiSuggestTitles(p),
+          adaptar_medida: (p) => (window.GenerationApi || window.api).aiAdaptMeasure(p),
+          traduccion: (p) => (window.GenerationApi || window.api).aiTranslateText(p),
+          presentacion: (p) => (window.GenerationApi || window.api).aiDraftPresentation(p)
         };
 
         const actionFn = actions[mode];
@@ -839,7 +880,7 @@ const AiView = {
           if (latencyEl) latencyEl.textContent = `${elapsed} ms`;
 
           const diag = await window.api.aiGetDiagnostic();
-          const activeModelName = (diag && (diag.modelName || diag.activeModelId)) || 'Qwen 2.5 3B Instruct';
+          const activeModelName = (diag && (diag.modelName || diag.activeModelId)) || (isCa ? 'Cap model seleccionat' : 'Ningún modelo seleccionado');
           if (modelBadge) modelBadge.textContent = activeModelName;
           if (pidBadge) pidBadge.textContent = `PID: ${(diag && (diag.pid || diag.serverPid)) || '--'}`;
 
@@ -901,6 +942,7 @@ const AiView = {
               }
             }
           }
+          window.GenerationUi?.markResult(res,outputEl);
         } catch (err) {
           if (resultBox) resultBox.style.display = 'block';
           if (outputEl) outputEl.innerHTML = `<span style="color: #dc2626; font-weight: 700;">Error:</span> ${escapeHtml(err.message || err)}`;

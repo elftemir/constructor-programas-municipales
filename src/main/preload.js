@@ -66,6 +66,12 @@ contextBridge.exposeInMainWorld('api', {
   setLastOpenedProjectId: (id) => ipcRenderer.invoke('config:setLastProjectId', id),
 
   // Local AI (Fase 2)
+  aiBackendState: (request) => ipcRenderer.invoke('ai:backend-state',request),
+  aiBackendRedetect: () => ipcRenderer.invoke('ai:backend-redetect'),
+  onAiBackendState: (callback) => {
+    const handler=(_,state)=>callback(state);ipcRenderer.on('ai:backend-state',handler);
+    return ()=>ipcRenderer.removeListener('ai:backend-state',handler);
+  },
   aiGetSpecs: () => ipcRenderer.invoke('ai:getSpecs'),
   aiGetModels: () => ipcRenderer.invoke('ai:getModels'),
   aiInstallModel: (modelId) => ipcRenderer.invoke('ai:installModel', modelId),
@@ -81,6 +87,7 @@ contextBridge.exposeInMainWorld('api', {
   aiTranslateText: (params) => ipcRenderer.invoke('ai:translateText', params),
   aiTranslateStructuredText: (params) => ipcRenderer.invoke('ai:translateStructuredText', params),
   aiDraftPresentation: (params) => ipcRenderer.invoke('ai:draftPresentation', params),
+  aiCancelGeneration: (params) => ipcRenderer.invoke('ai:cancelGeneration', params),
   aiDraftAreaIntro: (params) => ipcRenderer.invoke('ai:draftAreaIntro', params),
   aiSuggestHighlight: (params) => ipcRenderer.invoke('ai:suggestHighlight', params),
   aiDraftClosing: (params) => ipcRenderer.invoke('ai:draftClosing', params),
@@ -144,7 +151,9 @@ contextBridge.exposeInMainWorld('api', {
   // Actualizaciones de contenidos (Fase 3.4B)
   getContentUpdateStatus: () => ipcRenderer.invoke('contentUpdater:getStatus'),
   checkContentUpdates: () => ipcRenderer.invoke('contentUpdater:check'),
-  installContentUpdate: (contentId) => ipcRenderer.invoke('contentUpdater:install', contentId),
+  bootstrapOfficialContent: (force = false) => ipcRenderer.invoke('contentUpdater:bootstrap', force === true),
+  getTestContentItems: () => ipcRenderer.invoke('contentUpdater:testItems'),
+  installContentUpdate: (contentId, options = {}) => ipcRenderer.invoke('contentUpdater:install', contentId, { allowTestFixture: options.allowTestFixture === true }),
   onContentUpdateStatus: (callback) => {
     const handler = (_, data) => callback(data);
     ipcRenderer.on('contentUpdater:status', handler);

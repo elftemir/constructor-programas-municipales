@@ -29,13 +29,14 @@ function up(db, { addColumnIfNotExists, tableExists }) {
   // Solo se inserta para proyectos que no dispongan todavía de una fuente principal registrada.
   db.run(`
     INSERT OR IGNORE INTO proyecto_fuentes (id, proyecto_id, fuente_id, rol, fecha_anadida)
-    SELECT ('pf_' || p.id || '_' || coalesce(p.fuente_id, 'fuente_marco_oficial')),
+    SELECT ('pf_' || p.id || '_' || p.fuente_id),
            p.id,
-           coalesce(p.fuente_id, 'fuente_marco_oficial'),
+           p.fuente_id,
            'principal',
            datetime('now')
     FROM proyectos p
-    WHERE p.id NOT IN (
+    WHERE EXISTS (SELECT 1 FROM programas_fuente f WHERE f.id = p.fuente_id)
+    AND p.id NOT IN (
       SELECT pf.proyecto_id FROM proyecto_fuentes pf WHERE pf.rol = 'principal'
     );
   `);

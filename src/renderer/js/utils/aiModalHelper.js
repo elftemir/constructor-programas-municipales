@@ -7,6 +7,12 @@
  */
 
 const AiModalHelper = {
+  renderMarkedText(text,warnings=[],isCa=false){
+    const encode=value=>escapeHtml(String(value||'')).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    const ranges=warnings.filter(w=>Number.isInteger(w.start)&&Number.isInteger(w.end)&&w.start>=0&&w.end>w.start&&w.end<=text.length&&(text.slice(w.start,w.end)===(w.displayFragment||w.fragment))).sort((a,b)=>a.start-b.start||b.end-a.end);
+    let at=0,html='';for(const warning of ranges){if(warning.start<at)continue;html+=encode(text.slice(at,warning.start))+'<mark class="ai-warning-mark" style="background:#fef08a;color:inherit" title="'+encode(isCa?warning.message_ca:warning.message_es)+'">'+encode(text.slice(warning.start,warning.end))+'</mark>';at=warning.end;}return html+encode(text.slice(at));
+  },
+
   showTitleModal(measure, project, onSelected) {
     const isCa = window.i18n && window.i18n.getLang() === 'ca';
     const modalContainer = document.querySelector('#modal-container') || document.body;
@@ -94,7 +100,7 @@ const AiModalHelper = {
       btnApply.disabled = true;
 
       try {
-        const res = await window.api.aiSuggestTitles({
+        const res = await (window.GenerationApi || window.api).aiSuggestTitles({
           projectId: project.id,
           texto: measure.texto || measure.explicacion || '',
           tituloActual: measure.titulo || '',
@@ -133,6 +139,7 @@ const AiModalHelper = {
             </div>
           `;
         }).join('');
+        window.GenerationUi?.markResult(res,optionsEl);
 
         // Manejar selección de opción
         optionsEl.querySelectorAll('.title-option-card').forEach(card => {
@@ -191,6 +198,7 @@ const AiModalHelper = {
     onAccept,
     onRegenerate
   }) {
+    if(window.TextFormat){const embedded=window.TextFormat.internalObject(originalText);if(embedded){const section=embedded.entradilla!==undefined?'presentacion':'cierre';originalText=window.TextFormat.display(section,window.TextFormat.format(section,embedded));}}
     const isCa = window.i18n && window.i18n.getLang() === 'ca';
     const modalContainer = document.querySelector('#modal-container') || document.body;
 
@@ -314,6 +322,7 @@ const AiModalHelper = {
     let timerInterval = null;
     let elapsedSeconds = 0;
     let isCancelled = false;
+    let generationRequestId=null;
 
     const startTimer = () => {
       elapsedSeconds = 0;
@@ -336,6 +345,7 @@ const AiModalHelper = {
 
     const closeModal = () => {
       isCancelled = true;
+      if(generationRequestId)window.api.aiCancelGeneration?.({generationRequestId}).catch(()=>{});
       stopTimer();
       overlay.remove();
       modalContainer.style.display = 'none';
@@ -349,6 +359,9 @@ const AiModalHelper = {
 
     const runTask = async () => {
       isCancelled = false;
+      isEditing=false;displayEl.style.display='block';editorEl.style.display='none';
+      btnRegen.disabled=true;
+      generationRequestId=window.crypto?.randomUUID?.()||('generation-'+Date.now()+'-'+Math.random().toString(16).slice(2));
       startTimer();
       loadingEl.style.display = 'block';
       contentEl.style.display = 'none';
@@ -361,7 +374,11 @@ const AiModalHelper = {
       }
 
       try {
-        currentResult = await window.api[taskMethod]({ projectId: typeof App !== 'undefined' ? App.currentProject?.id : undefined, ...taskParams });
+        if(!taskMethod.startsWith('aiTranslate')&&taskParams.generationTask&&window.WritingContract){
+          const minimum=window.WritingContract.minimumState(taskParams.generationTask,taskParams.selectedMeasures||[],taskParams.idioma||'es',taskParams);
+          if(!minimum.allowed){btnRegen.disabled=true;btnRegen.title=minimum.message;throw new Error(minimum.message);}
+        }
+        currentResult = await (window.GenerationApi || window.api)[taskMethod]({ projectId: typeof App !== 'undefined' ? App.currentProject?.id : undefined, ...taskParams, generationRequestId });
         stopTimer();
         if (isCancelled) return;
 
@@ -395,10 +412,12 @@ const AiModalHelper = {
             return;
           }
           const errMsg = (currentResult.error && currentResult.error.message) || currentResult.message || 'Error en la petición de IA';
-          throw new Error(errMsg);
+          const codes=currentResult.meta?.qualityErrors||[];
+          const key=codes.includes('LANGUAGE_MIX')?'ai.rejectionLanguage':codes.some(c=>['TRUNCATED','FRAGMENT_LENGTH','TOO_SHORT','TOO_LONG'].includes(c))?'ai.rejectionLength':codes.some(c=>['OTHER_MUNICIPALITY','UNSUPPORTED_NUMBER','UNSUPPORTED_PROBLEM','ELECTORAL_CLAIM','UNSUPPORTED_MEASURE_CHANGE','INVENTED_SLOGAN'].includes(c))?'ai.rejectionContent':'ai.rejectionFormat';
+          throw new Error(codes.length?window.i18n.t('ai.rejectedProposal')+' '+window.i18n.t(key)+'.':errMsg);
         }
 
-        const generatedText = currentResult?.data?.texto || currentResult?.texto || currentResult?.data?.introduccion || currentResult?.introduccion || currentResult?.frase_destacada || '';
+        const generatedText = currentResult?.texto || currentResult?.data?.texto || currentResult?.data?.introduccion || currentResult?.introduccion || currentResult?.frase_destacada || '';
         if (!generatedText || !generatedText.trim()) {
           throw new Error(isCa ? 'No s\'ha rebut una proposta vàlida.' : 'No se ha recibido una propuesta válida.');
         }
@@ -408,7 +427,8 @@ const AiModalHelper = {
         btnAccept.disabled = false;
         btnEdit.disabled = false;
 
-        displayEl.textContent = generatedText;
+        displayEl.innerHTML = this.renderMarkedText(generatedText,currentResult.qualityWarnings||[],isCa);
+        window.GenerationUi?.markResult(currentResult,displayEl);
         editorEl.value = generatedText;
 
         if (propBadge) {
@@ -416,11 +436,13 @@ const AiModalHelper = {
           propBadge.textContent = `${w} ${isCa ? 'paraules' : 'palabras'}`;
         }
 
-        if (currentResult.avisos && currentResult.avisos.length > 0) {
+        const visibleWarnings=currentResult.qualityWarnings?.length?window.WritingWarnings.messages(currentResult.qualityWarnings,isCa?'ca':'es'):(currentResult.avisos||[]);
+        if (visibleWarnings.length > 0) {
           avisosBox.style.display = 'block';
-          avisosList.innerHTML = currentResult.avisos.map(a => `<div>• ${escapeHtml(a)}</div>`).join('');
+          avisosList.innerHTML = visibleWarnings.map(a => `<div>• ${escapeHtml(a)}</div>`).join('');
         } else {
-          avisosBox.style.display = 'none';
+          avisosBox.style.display = 'block';
+          avisosList.textContent = window.WritingWarnings.clearMessage(isCa?'ca':'es');
         }
       } catch (err) {
         stopTimer();
@@ -468,6 +490,10 @@ const AiModalHelper = {
         if (retryBtn) retryBtn.addEventListener('click', runTask);
         const cancelErrBtn = loadingEl.querySelector('#btn-cancel-proposal-err');
         if (cancelErrBtn) cancelErrBtn.addEventListener('click', closeModal);
+      }finally{
+        generationRequestId=null;
+        const minimum=!taskMethod.startsWith('aiTranslate')&&taskParams.generationTask&&window.WritingContract?.minimumState(taskParams.generationTask,taskParams.selectedMeasures||[],taskParams.idioma||'es',taskParams);
+        btnRegen.disabled=minimum?!minimum.allowed:false;
       }
     };
 
@@ -498,12 +524,12 @@ const AiModalHelper = {
 
     btnAccept.addEventListener('click', () => {
       const finalText = isEditing ? editorEl.value : (currentResult?.texto || currentResult?.introduccion || editorEl.value);
+      const writingTask=taskParams.generationTask||({aiDraftPresentation:'redactar_presentacion',aiDraftAreaIntro:'redactar_introduccion_area',aiDraftClosing:'redactar_cierre'})[taskMethod];
+      let accepted;
+      try{accepted=window.TextFormat.normalizeProposal(currentResult,writingTask,isEditing?finalText:null);}catch(error){window.alert(isCa?'La proposta té un format intern incorrecte. Revisa-la abans d’acceptar-la.':'La propuesta tiene un formato interno incorrecto. Revísala antes de aceptarla.');return;}
       closeModal();
       if (onAccept) {
-        onAccept({
-          ...currentResult,
-          texto: finalText
-        });
+        onAccept(accepted);
       }
     });
 

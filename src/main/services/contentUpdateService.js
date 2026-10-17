@@ -166,6 +166,10 @@ class ContentUpdateService {
     this.listeners = new Set();
     this.autoCheckScheduled = false;
     this.validatedCatalogMap = new Map();
+    this.bootstrapPromise = null;
+    this.bootstrapAttempted = false;
+    this.bootstrapResult = { status: 'EMPTY' };
+    this.catalogCheckPromise = null;
 
     this.state = {
       status: CONTENT_UPDATE_STATES.IDLE,
@@ -188,6 +192,10 @@ class ContentUpdateService {
 
   isPackagedApp() {
     return Boolean(electronApp && electronApp.isPackaged);
+  }
+
+  allowsTestContent() {
+    return !this.isPackagedApp() && process.env.CPM_ALLOW_TEST_CONTENT === '1';
   }
 
   getCacheFilePath() {
@@ -243,7 +251,42 @@ class ContentUpdateService {
   }
 
   getStatus() {
-    return JSON.parse(JSON.stringify(this.state));
+    return JSON.parse(JSON.stringify({ ...this.state, testContentEnabled: this.allowsTestContent() }));
+  }
+
+  async getTestContentItems() {
+    if (!this.allowsTestContent()) return [];
+    if (!this.validatedCatalogMap.size) await this.checkForContentUpdates({ silent: true, source: 'test_browser' });
+    return [...this.validatedCatalogMap.values()].filter(item => item.official !== true || item.is_test_fixture === true)
+      .map(item => ({ ...item, compatible_with_app: compareSemver(this.appVersion, item.min_app_version) >= 0 }));
+  }
+
+  async bootstrapOfficialContent(force = false) {
+    if (this.bootstrapPromise) return this.bootstrapPromise;
+    this.bootstrapPromise = this.bootstrapOfficialContentOnce(force).finally(() => { this.bootstrapPromise = null; });
+    return this.bootstrapPromise;
+  }
+
+  async bootstrapOfficialContentOnce(force) {
+    const db = await getDb();
+    if (queryOne(db, 'SELECT COUNT(*) AS count FROM programas_fuente WHERE retirado_por_prueba = 0 AND archivado = 0').count > 0) return { status: 'READY' };
+    if (this.bootstrapAttempted && !force) return this.bootstrapResult;
+    this.bootstrapAttempted = true;
+    this.updateState({ bootstrapInProgress: true });
+    try {
+      const state = await this.checkForContentUpdates({ silent: true, source: 'bootstrap' });
+      if (state.status === CONTENT_UPDATE_STATES.ERROR) return (this.bootstrapResult = { status: 'EMPTY', reason: 'CATALOG_ERROR' });
+      const official = [...this.validatedCatalogMap.values()].filter(item =>
+        item.content_type === 'programa_marco' && item.official === true && item.is_test_fixture !== true &&
+        compareSemver(this.appVersion, item.min_app_version) >= 0);
+      official.sort((a,b) => compareSemver(b.content_version, a.content_version) || String(b.published_at || '').localeCompare(String(a.published_at || '')));
+      if (official.length === 0) return (this.bootstrapResult = { status: 'EMPTY', reason: 'NO_OFFICIAL_CONTENT' });
+      // Offer the verified entry. A download always requires the user's click.
+      if (queryOne(db, 'SELECT COUNT(*) AS count FROM programas_fuente WHERE retirado_por_prueba = 0 AND archivado = 0').count > 0) return { status: 'READY' };
+      return (this.bootstrapResult = { status: 'AVAILABLE', item: official[0] });
+    } catch (error) {
+      return (this.bootstrapResult = { status: 'EMPTY', reason: error.code || 'INSTALL_ERROR' });
+    } finally { this.updateState({ bootstrapInProgress: false }); }
   }
 
   scheduleStartupCheck(delayMs = 6500) {
@@ -270,7 +313,7 @@ class ContentUpdateService {
     const db = await getDb();
     let rows = [];
     try {
-      rows = queryAll(db, `SELECT * FROM contenidos_instalados ORDER BY installed_at DESC`);
+      rows = queryAll(db, `SELECT * FROM contenidos_instalados WHERE retirado_por_prueba = 0 ORDER BY installed_at DESC`);
     } catch (e) {
       rows = [];
     }
@@ -484,7 +527,13 @@ class ContentUpdateService {
         throw new Error(`Entrada de catálogo inválida en posición ${i}`);
       }
 
+      // Production never loads non-official packages, including through the manual browser.
+      if (!this.allowsTestContent() && (entry.official !== true || entry.is_test_fixture === true)) continue;
+
       const contentId = sanitizePlainText(entry.content_id, 120);
+      if (typeof entry.official !== 'boolean' || (entry.is_test_fixture != null && typeof entry.is_test_fixture !== 'boolean')) {
+        throw new Error('Los atributos official e is_test_fixture deben ser booleanos.');
+      }
       if (!SAFE_ID_REGEX.test(contentId)) {
         throw new Error(`content_id inválido en catálogo: ${contentId}`);
       }
@@ -600,6 +649,12 @@ class ContentUpdateService {
   }
 
   async checkForContentUpdates(options = {}) {
+    if (this.catalogCheckPromise) return this.catalogCheckPromise;
+    this.catalogCheckPromise = this.checkCatalogOnce(options).finally(() => { this.catalogCheckPromise = null; });
+    return this.catalogCheckPromise;
+  }
+
+  async checkCatalogOnce(options = {}) {
     const silent = Boolean(options.silent);
     const source = options.source || 'manual';
 
@@ -661,6 +716,7 @@ class ContentUpdateService {
       const availableItems = [];
 
       for (const remoteItem of validatedCatalog.programas_marco) {
+        if (remoteItem.official !== true || remoteItem.is_test_fixture === true) continue;
         const localItem = installedById.get(remoteItem.content_id);
         const isNew = !localItem;
         const isUpdate = Boolean(
@@ -1259,8 +1315,9 @@ class ContentUpdateService {
     const fuenteId = contentId;
     const nowIso = new Date().toISOString();
 
-    const isOfficial = Boolean(manifest.official);
+    const isOfficial = manifest.official === true && manifest.is_test_fixture !== true;
     const isTestFixture = Boolean(manifest.is_test_fixture) || !isOfficial;
+    if (isTestFixture && !this.allowsTestContent()) throw new Error('Este contenido de prueba no está permitido en producción.');
 
     const newDbAreaIds = new Set(aligned.areas.map((a) => `${fuenteId}__${a.canonicalAreaId}`));
     const newDbMeasureIds = new Set(
@@ -1359,6 +1416,13 @@ class ContentUpdateService {
     let targetActivo = 0;
 
     db.run('BEGIN TRANSACTION;');
+    // Freeze the secondary-language copy of selected measures before replacing catalogue rows.
+    // The primary-language version and user adaptations are already stored in decisiones_medidas.
+    if(existingSource){
+      const selected=queryAll(db,`SELECT d.id,p.idioma_principal,m.titulo_es,m.titulo_ca,m.texto_es,m.texto_ca,m.explicacion_es,m.explicacion_ca FROM decisiones_medidas d JOIN proyectos p ON p.id=d.proyecto_id JOIN medidas m ON m.id=d.medida_id WHERE m.fuente_id=? AND d.estado IN ('incluida','adaptada')`,[fuenteId]);
+      for(const copy of selected){const secondary=copy.idioma_principal==='ca'?'es':'ca';db.run(`UPDATE decisiones_medidas SET traduccion_titulo=CASE WHEN coalesce(traduccion_titulo,'')='' THEN ? ELSE traduccion_titulo END,traduccion_texto=CASE WHEN coalesce(traduccion_texto,'')='' THEN ? ELSE traduccion_texto END,traduccion_explicacion=CASE WHEN coalesce(traduccion_explicacion,'')='' THEN ? ELSE traduccion_explicacion END WHERE id=?`,[copy['titulo_'+secondary]||'',copy['texto_'+secondary]||'',copy['explicacion_'+secondary]||'',copy.id]);}
+    }
+
     try {
       if (existingSource) {
         // MISMO content_id (Regla 1 y 4):
@@ -1371,17 +1435,17 @@ class ContentUpdateService {
         const prevOfficialActive = queryOne(
           db,
           `SELECT id FROM programas_fuente
-           WHERE (official = 1 OR id = 'fuente_marco_oficial')
+           WHERE official = 1
              AND oficial_actual_protegido = 1
              AND activo = 1
            LIMIT 1`
         );
 
-        // Desproteger todos los programas oficiales anteriores (incluyendo fuente_marco_oficial)
+        // Desproteger todos los programas oficiales anteriores
         db.run(
           `UPDATE programas_fuente
            SET oficial_actual_protegido = 0, updated_at = ?
-           WHERE (official = 1 OR id = 'fuente_marco_oficial')`,
+           WHERE official = 1`,
           [nowIso]
         );
         db.run(
@@ -1633,7 +1697,7 @@ class ContentUpdateService {
   /**
    * Descarga, verifica e instala un paquete de contenido autorizado por el usuario (Secciones 15–27).
    */
-  async installContentUpdate(contentId) {
+  async installContentUpdate(contentId, options = {}) {
     const cleanId = sanitizePlainText(contentId, 120);
     if (!SAFE_ID_REGEX.test(cleanId)) {
       throw new Error('Identificador de contenido no válido');
@@ -1647,6 +1711,12 @@ class ContentUpdateService {
     const catalogEntry = this.validatedCatalogMap.get(cleanId);
     if (!catalogEntry) {
       throw new Error(`El contenido solicitado (${cleanId}) no se encuentra en el catálogo oficial validado.`);
+    }
+    const isTest = catalogEntry.official !== true || catalogEntry.is_test_fixture === true;
+    if (isTest && !this.allowsTestContent()) throw new Error('Los paquetes de prueba solo están disponibles en desarrollo autorizado.');
+    if (isTest && options.allowTestFixture !== true) throw new Error('Activa «Mostrar contenidos de prueba» antes de instalar un paquete de prueba.');
+    if (options.automatic === true && (catalogEntry.official !== true || catalogEntry.is_test_fixture === true)) {
+      throw new Error('Los paquetes de prueba nunca se instalan automáticamente.');
     }
 
     if (compareSemver(this.appVersion, catalogEntry.min_app_version) < 0) {
@@ -1726,6 +1796,12 @@ class ContentUpdateService {
       }
 
       const verifiedPkg = await this.verifyAndExtractPackage(zipBuffer, catalogEntry);
+      if (Boolean(verifiedPkg.manifest.is_test_fixture) !== Boolean(catalogEntry.is_test_fixture) && verifiedPkg.manifest.official === true) {
+        throw new Error('El atributo is_test_fixture del manifiesto no coincide con el catálogo.');
+      }
+      if (options.automatic === true && (verifiedPkg.manifest.official !== true || verifiedPkg.manifest.is_test_fixture === true)) {
+        throw new Error('El manifiesto no corresponde a un Programa Marco oficial apto para el primer arranque.');
+      }
 
       // 3. Fase INSTALLING (Transacción SQLite)
       this.updateState({

@@ -1,3 +1,4 @@
+const { getLema } = require('../../utils/lema');
 const WRITING_TASKS = new Set(['sugerir_titulos', 'adaptar_medida', 'desarrollar_medida', 'mejorar_redaccion', 'corregir_texto', 'resumir_texto', 'redactar_presentacion', 'redactar_introduccion_area', 'sugerir_frase_destacada', 'redactar_cierre']);
 const hasValue = value => value !== null && value !== undefined && value !== '' && !(typeof value === 'number' && !Number.isFinite(value));
 function compact(value) {
@@ -14,7 +15,7 @@ function buildMunicipalContext(project = {}, ficha = {}, lang = 'es') {
     [ca ? 'Municipi' : 'Municipio', pick('municipio')], [ca ? 'Província' : 'Provincia', pick('provincia')], ['Comarca', pick('comarca')],
     [ca ? 'Habitants' : 'Habitantes', population], [ca ? 'Any de la població' : 'Año de la población', hasValue(population) ? year : null],
     [ca ? 'Font de població' : 'Fuente de población', hasValue(population) ? (hasValue(project.habitantes) ? project.poblacion_fuente : ficha.fuente_poblacion) : null],
-    ['Candidatura', pick('organizacion') || pick('partido')], [ca ? 'Mandat' : 'Mandato', pick('mandato')], ['Lema', pick('lema')],
+    ['Candidatura', pick('organizacion') || pick('partido')], [ca ? 'Mandat' : 'Mandato', pick('mandato')], ['Lema', getLema(project, lang)],
     [ca ? 'Pressupost municipal (€)' : 'Presupuesto municipal (€)', pick('presupuesto_municipal')],
     [ca ? 'Pressupost inversions (€)' : 'Presupuesto inversiones (€)', pick('presupuesto_inversiones')],
     [ca ? 'Empreses municipals' : 'Empresas municipales', pick('empresas_municipales')],
@@ -27,7 +28,9 @@ function buildMunicipalContext(project = {}, ficha = {}, lang = 'es') {
   ].join('\n');
 }
 async function enrichWritingParams(task, params = {}) {
-  if (!WRITING_TASKS.has(task)) return params;
+  const contract=require('../../../shared/writingContract');
+  const generationTask=contract.MIN_SELECTED[task]?task:params.generationTask;
+  if (!WRITING_TASKS.has(task)&&!contract.MIN_SELECTED[generationTask]) return params;
   let project = params;
   let ficha = {};
   const id = params.projectId || params.proyecto_id;
@@ -36,10 +39,13 @@ async function enrichWritingParams(task, params = {}) {
     if (!project) throw new Error('Proyecto no encontrado para el contexto municipal.');
     if (project.codigo_ine) ficha = await require('../fichaMunicipioService').getFichaMunicipio(project.codigo_ine) || {};
   }
+  const lang=params.idioma_salida||params.idioma||params.language||'es';
+  const selected=contract.MIN_SELECTED[generationTask]?(id?contract.selectedMeasures(project,lang,generationTask==='redactar_introduccion_area'?params.areaId:null):(params.selectedMeasures||[])):null;
   return { ...params, municipio: project.municipio || params.municipio,
+    ...(selected?{generationTask,selectedMeasures:selected,medidas_incluidas:selected,medidas_resumen:selected,ejes_prioridades:selected}:{}),
     contexto_municipal: buildMunicipalContext(project, ficha, params.idioma_salida || params.idioma || params.language || 'es'),
     // Preserve the saved project identity across every entry point.
-    ...(id ? { organizacion: project.organizacion || project.partido || '', partido: project.partido || '', mandato: project.mandato || '', lema: project.lema || '' } : {})
+    ...(id ? { organizacion: project.organizacion || project.partido || '', partido: project.partido || '', mandato: project.mandato || '', lema_es: getLema(project, 'es'), lema_ca: getLema(project, 'ca') } : {})
   };
 }
 module.exports = { WRITING_TASKS, buildMunicipalContext, enrichWritingParams };

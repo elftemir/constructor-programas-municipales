@@ -24,11 +24,17 @@ function copyPackage(name, from = root, optional = false) {
   catch (error) { if (optional) return; throw error; }
   const pkg = JSON.parse(fs.readFileSync(path.join(source, 'package.json'), 'utf8'));
   const target = path.join(dest, 'node_modules', name); fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.cpSync(source, target, { recursive: true }); copied.set(name, { version: pkg.version, license: pkg.license || null });
+  fs.cpSync(source, target, { recursive: true, filter: filename => {
+    const relative = path.relative(source, filename).replaceAll('\\', '/');
+    return !/(?:^|\/)(?:test[^/]*|scripts|examples|fixtures)(?:\/|$)/i.test(relative) && !/\.(?:map|ts)$/i.test(relative) && !/(?:^|\/)README(?:\.[^/]*)?$/i.test(relative);
+  } }); copied.set(name, { version: pkg.version, license: pkg.license || null });
   for (const dep of Object.keys(pkg.dependencies || {})) copyPackage(dep, source);
   for (const dep of Object.keys(pkg.optionalDependencies || {})) copyPackage(dep, source, true);
 }
 async function main() {
+  const packageTarget = path.resolve(dest, 'node_modules');
+  if (!packageTarget.startsWith(path.resolve(root) + path.sep)) throw Error('Unexpected runtime destination');
+  fs.rmSync(packageTarget, { recursive: true, force: true });
   fs.mkdirSync(path.join(dest, 'languages'), { recursive: true });
   for (const [file, expected] of Object.entries(languages)) {
     const target = path.join(dest, 'languages', file);
@@ -54,7 +60,7 @@ async function main() {
   for (const file of fs.readdirSync(core)) {
     if (/^tesseract-core/.test(file) && !Object.hasOwn(coreHashes, file)) fs.unlinkSync(path.join(core, file));
   }
-  for (const file of ['ocrProcess.js', 'blockOcrNetwork.js', 'tesseractLocalWorker.js']) {
+  for (const file of ['ocrProcess.js', 'blockOcrNetwork.js', 'tesseractLocalWorker.js', 'pdfLayout.js']) {
     fs.copyFileSync(path.join(root, 'src/main/services/importer', file), path.join(dest, file));
   }
   const licenseDir = path.join(root, 'resources/ocr-licenses');

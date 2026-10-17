@@ -55,6 +55,9 @@ function sanitizeExportOptionsFromIpc(options) {
   if (typeof options.exportBothLanguages === 'boolean') {
     safe.exportBothLanguages = options.exportBothLanguages;
   }
+  if (options.lemaAlternativoConfirmado === true) {
+    safe.lemaAlternativoConfirmado = true;
+  }
   if (typeof options.suffix === 'string' && /^(_ES|_CA)?$/i.test(options.suffix)) {
     safe.suffix = options.suffix;
   }
@@ -149,9 +152,7 @@ function loadMunicipiosDataset() {
 function createWindow() {
   const iconCandidates = [
     path.join(__dirname, 'assets', 'icons', 'app_icon.ico'),
-    path.join(__dirname, '..', 'renderer', 'assets', 'icons', 'app_icon.ico'),
-    path.join(__dirname, '..', '..', 'build', 'icon.ico'),
-    path.join(__dirname, '..', 'renderer', 'assets', 'icons', 'app_icon.png')
+    path.join(__dirname, '..', 'renderer', 'assets', 'icons', 'app_icon_256.png')
   ];
   let appIcon = undefined;
   for (const ic of iconCandidates) {
@@ -539,15 +540,6 @@ function setupIpcHandlers() {
 
   ipcMain.handle('app:getVersion', () => {
     const pkg = require('../../package.json');
-    let catVer = 'Sin catálogo preinstalado';
-    try {
-      const catPath = resolveAssetPath('data', 'catalogo_marco.json');
-      if (fs.existsSync(catPath)) {
-        const catData = JSON.parse(fs.readFileSync(catPath, 'utf8'));
-        if (catData?.metadata?.version) catVer = catData.metadata.version;
-        else if (catData?.version) catVer = catData.version;
-      }
-    } catch (e) {}
 
     return {
       version: pkg.version || '3.4.0',
@@ -557,7 +549,6 @@ function setupIpcHandlers() {
       authorEmail: typeof pkg.author === 'object' ? pkg.author.email : 'elftemir@hotmail.com',
       license: pkg.license || 'GPL-3.0-or-later',
       repositoryUrl: 'https://github.com/elftemir/constructor-programas-municipales',
-      catalogoVersion: catVer,
       defaultExportDir: getDefaultExportDir()
     };
   });
@@ -593,6 +584,10 @@ function setupIpcHandlers() {
     const ALLOWED_EXTERNAL_URLS = new Set([
       'https://github.com/elftemir/constructor-programas-municipales',
       'https://www.libreoffice.org/download/',
+      'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/blob/main/LICENSE',
+      'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/blob/main/LICENSE',
+      'https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/blob/main/LICENSE',
+      'https://github.com/wooorm/franc',
       'mailto:elftemir@hotmail.com'
     ]);
 
@@ -620,6 +615,28 @@ function setupIpcHandlers() {
   });
 
   // Local AI Operations (Fase 2)
+  const backendManager=aiService.serverManager;
+  const {validateBackendRequest}=require('./services/ai/backendSelection');
+  const generationSource=require('./services/ai/generationSource');
+  backendManager.backendSelection.onStatus(async state=>{
+    if(state.status==='gpu-failed')generationSource.transitionToCpu();
+    try{
+      const availability=await aiService.getAvailability();
+      if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('ai:backend-state',{...state,availability,generation:generationSource.getState()});
+    }catch(error){console.warn('[AI availability]',error.message);}
+  });
+  ipcMain.handle('ai:backend-state',async(_,request)=>{
+    const safe=validateBackendRequest(request);
+    if(safe.mode){backendManager.backendSelection.setMode(safe.mode);if(backendManager.activeModelPath)backendManager.scheduleDetection(backendManager.activeModelPath,backendManager.activeModelId);}
+    if(safe.ackRetirement)aiService.acknowledgeRetirement();
+    return {...backendManager.backendSelection.getStatus(),availability:await aiService.getAvailability(),retirementNotice:aiService.getRetirementNotice(),generation:generationSource.getState()};
+  });
+  ipcMain.handle('ai:backend-redetect',async(_,request)=>{
+    if(request!==undefined)throw new TypeError('Detection takes no arguments');
+    backendManager.backendSelection.reset();
+    if(backendManager.activeModelPath)backendManager.scheduleDetection(backendManager.activeModelPath,backendManager.activeModelId);
+    return backendManager.backendSelection.getStatus();
+  });
   ipcMain.handle('ai:getSpecs', async () => {
     return await aiService.checkHardwareSpecs();
   });
@@ -629,13 +646,16 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle('ai:installModel', async (event, modelId) => {
-    return await aiService.installModel(modelId, (progress) => {
+    const result=await aiService.installModel(modelId, (progress) => {
       if (event && event.sender && !event.sender.isDestroyed()) {
         event.sender.send('ai:download-progress', progress);
       } else if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('ai:download-progress', progress);
       }
     });
+    const availability=await aiService.getAvailability();
+    if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('ai:backend-state',{...backendManager.backendSelection.getStatus(),availability});
+    return result;
   });
 
   ipcMain.handle('ai:cancelDownload', async (_, modelId) => {
@@ -643,7 +663,10 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle('ai:deleteModel', async (_, modelId) => {
-    return await aiService.deleteModel(modelId);
+    const result=await aiService.deleteModel(modelId);
+    const availability=await aiService.getAvailability();
+    if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('ai:backend-state',{...backendManager.backendSelection.getStatus(),availability});
+    return result;
   });
 
   ipcMain.handle('ai:testModel', async (_, modelId) => {
@@ -678,24 +701,25 @@ function setupIpcHandlers() {
     return await aiService.traducirTexto(params);
   });
 
-  ipcMain.handle('ai:translateStructuredText', async (_, params) => {
-    return await aiService.traducirTextoEstructurado(params);
+  ipcMain.handle('ai:cancelGeneration',async(event,request)=>require('./services/ai/generationJobs').cancel(event.sender.id,request));
+  ipcMain.handle('ai:translateStructuredText', async (event, params) => {
+    return await require('./services/ai/generationJobs').run(event.sender.id,params,input=>aiService.traducirTextoEstructurado(input));
   });
 
-  ipcMain.handle('ai:draftPresentation', async (_, params) => {
-    return await aiService.redactarPresentacion(params);
+  ipcMain.handle('ai:draftPresentation', async (event, params) => {
+    return await require('./services/ai/generationJobs').run(event.sender.id,params,input=>aiService.redactarPresentacion(input));
   });
 
-  ipcMain.handle('ai:draftAreaIntro', async (_, params) => {
-    return await aiService.redactarIntroduccionArea(params);
+  ipcMain.handle('ai:draftAreaIntro', async (event, params) => {
+    return await require('./services/ai/generationJobs').run(event.sender.id,params,input=>aiService.redactarIntroduccionArea(input));
   });
 
   ipcMain.handle('ai:suggestHighlight', async (_, params) => {
     return await aiService.sugerirFraseDestacada(params);
   });
 
-  ipcMain.handle('ai:draftClosing', async (_, params) => {
-    return await aiService.redactarCierre(params);
+  ipcMain.handle('ai:draftClosing', async (event, params) => {
+    return await require('./services/ai/generationJobs').run(event.sender.id,params,input=>aiService.redactarCierre(input));
   });
 
   ipcMain.handle('ai:reviewText', async (_, params) => {
@@ -723,7 +747,10 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle('ai:setActiveModel', async (_, modelId) => {
-    return aiService.setActiveModel(modelId);
+    const result=aiService.setActiveModel(modelId);
+    const availability=await aiService.getAvailability();
+    if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('ai:backend-state',{...backendManager.backendSelection.getStatus(),availability});
+    return result;
   });
 
   // Programas Fuente (Fase 3.1)
@@ -883,11 +910,17 @@ function setupIpcHandlers() {
     return await contentUpdateService.checkForContentUpdates({ silent: false });
   });
 
-  ipcMain.handle('contentUpdater:install', async (_, contentId) => {
+  ipcMain.handle('contentUpdater:bootstrap', async (_, force) => {
+    return await contentUpdateService.bootstrapOfficialContent(force === true);
+  });
+
+  ipcMain.handle('contentUpdater:testItems', async () => contentUpdateService.getTestContentItems());
+
+  ipcMain.handle('contentUpdater:install', async (_, contentId, options) => {
     if (!contentId || typeof contentId !== 'string') {
       throw new Error('ID de contenido no válido');
     }
-    return await contentUpdateService.installContentUpdate(contentId);
+    return await contentUpdateService.installContentUpdate(contentId, { allowTestFixture: options?.allowTestFixture === true });
   });
 }
 

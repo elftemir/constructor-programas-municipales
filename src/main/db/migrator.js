@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { getUserDataDir } = require('../utils/paths');
 
-const TARGET_SCHEMA_VERSION = 5;
+const TARGET_SCHEMA_VERSION = 8;
 
 // Registro ordenado de migraciones
 const MIGRATIONS = [
@@ -10,7 +10,10 @@ const MIGRATIONS = [
   require('./migrations/002_phase3_sources'),
   require('./migrations/003_integrity_and_links'),
   require('./migrations/004_content_updates'),
-  require('./migrations/005_ocr_metadata')
+  require('./migrations/005_ocr_metadata'),
+  require('./migrations/006_lema_bilingue'),
+  require('./migrations/007_retire_test_content'),
+  require('./migrations/008_unify_source_defaults')
 ];
 
 function tableExists(db, tableName) {
@@ -76,7 +79,13 @@ function detectSchemaLevel(db) {
   }
 
   if (hasContenidosInstalados) {
-    return columnExists(db, 'programas_fuente', 'ocr_metadata_json') ? 5 : 4;
+    if (!columnExists(db, 'programas_fuente', 'ocr_metadata_json')) return 4;
+    if (!['proyectos', 'fichas_municipios'].every(table =>
+      ['lema_es', 'lema_ca'].every(column => columnExists(db, table, column)))) return 5;
+    if (!['programas_fuente', 'contenidos_instalados'].every(table => columnExists(db, table, 'retirado_por_prueba'))) return 6;
+    const neutral = ['areas', 'medidas', 'proyectos'].every(table =>
+      db.exec(`PRAGMA table_info(${table})`)[0].values.find(column => column[1] === 'fuente_id')[4] === null);
+    return neutral ? 8 : 7;
   }
 
   if (hasProyectoFuentes) {
@@ -110,7 +119,12 @@ function getMigrationBackupDir() {
 
 function createMigrationBackup(db, fromVersion, toVersion, dbFilePath) {
   const target = dbFilePath || path.join(getUserDataDir(), 'database', 'programa_electoral.sqlite');
-  const backupPath = require('./persistence').createBackup(target, Buffer.from(db.export()), 'schema' + fromVersion + '-to-' + toVersion);
+  // sql.js export reopens its connection and resets connection PRAGMAs.
+  const foreignKeys = db.exec('PRAGMA foreign_keys')[0].values[0][0];
+  let bytes;
+  try { bytes = Buffer.from(db.export()); }
+  finally { db.run('PRAGMA foreign_keys=' + (foreignKeys ? 'ON' : 'OFF')); }
+  const backupPath = require('./persistence').createBackup(target, bytes, 'schema' + fromVersion + '-to-' + toVersion);
   console.log('[Migrador] Copia previa: ' + backupPath);
   return backupPath;
 }
@@ -162,6 +176,10 @@ function validateIntegrity(db, preMetrics) {
 
   // Columnas críticas
   const requiredColumns = [
+    ['proyectos', 'lema_es'],
+    ['proyectos', 'lema_ca'],
+    ['fichas_municipios', 'lema_es'],
+    ['fichas_municipios', 'lema_ca'],
     ['proyectos', 'fuente_id'],
     ['proyectos', 'mapeo_fuentes_json'],
     ['areas', 'fuente_id'],
@@ -268,6 +286,8 @@ async function migrate(db, options = {}) {
   // 5. Ejecutar migraciones secuenciales en transacción
   const helpers = { tableExists, columnExists, addColumnIfNotExists };
 
+  const foreignKeysEnabled = db.exec('PRAGMA foreign_keys')[0].values[0][0];
+  db.run('PRAGMA foreign_keys=OFF');
   db.run("BEGIN TRANSACTION;");
   try {
     for (let step = startLevel; step < TARGET_SCHEMA_VERSION; step++) {
@@ -289,6 +309,8 @@ async function migrate(db, options = {}) {
 
     // Validar integridad antes de confirmar la transacción
     validateIntegrity(db, preMetrics);
+    if (db.exec('PRAGMA foreign_key_check').length) throw new Error('Foreign-key integrity check failed after migration');
+    if (db.exec('PRAGMA quick_check')[0].values[0][0] !== 'ok') throw new Error('SQLite integrity check failed after migration');
 
     db.run("COMMIT;");
     console.log(`[Migrador] Migración completada con éxito a esquema versión ${TARGET_SCHEMA_VERSION}`);
@@ -309,6 +331,8 @@ async function migrate(db, options = {}) {
     err.backupFile = backupFile;
     err.rolledBack = true;
     throw err;
+  } finally {
+    db.run('PRAGMA foreign_keys=' + (foreignKeysEnabled ? 'ON' : 'OFF'));
   }
 }
 

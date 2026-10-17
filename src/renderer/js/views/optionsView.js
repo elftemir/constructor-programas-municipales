@@ -226,7 +226,9 @@ const OptionsView = {
       </div>
     `;
 
+    if (window.AiView?.loadBackendControls) await window.AiView.loadBackendControls(container);
     this.bindEvents(container);
+    if (params.focusSection === 'ia') container.querySelector('#ai-backend-settings')?.scrollIntoView({behavior:'smooth',block:'start'});
 
     if (params && params.focusSection === 'updates') {
       setTimeout(() => {
@@ -439,6 +441,8 @@ const OptionsView = {
     if (!box) return;
     const isCa = window.i18n && window.i18n.getLang() === 'ca';
     const status = state && state.status ? state.status : 'IDLE';
+    const officialItems = (state?.availableItems || (state?.availableItem ? [state.availableItem] : []))
+      .filter(item => item.official === true && item.is_test_fixture !== true);
 
     if (status === 'IDLE' || status === 'CHECKING') {
       box.innerHTML = `
@@ -450,17 +454,17 @@ const OptionsView = {
       return;
     }
 
-    if (status === 'NO_CONTENT' || status === 'UP_TO_DATE') {
+    if (status === 'NO_CONTENT' || status === 'UP_TO_DATE' || ((status === 'AVAILABLE' || status === 'CONTENT_AVAILABLE') && officialItems.length === 0)) {
       box.innerHTML = `
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-default);padding:10px 12px;font-size:13.5px;color:#166534;">
-          <b>${isCa ? 'Continguts actualitzats' : 'Contenidos actualizados'}</b>
+          <b>${window.i18n.t('clean_start.no_official_updates')}</b>
         </div>`;
       return;
     }
 
     if ((status === 'AVAILABLE' || status === 'CONTENT_AVAILABLE') &&
         (state.availableItems && state.availableItems.length > 0 || state.availableItem)) {
-      const item = (state.availableItems && state.availableItems[0]) || state.availableItem;
+      const item = officialItems[0];
       const rawTitle = typeof item.title === 'object' ? (isCa ? (item.title?.ca || item.title?.es) : (item.title?.es || item.title?.ca)) : (item.title_es || item.title || '');
       const title = escapeHtml(rawTitle);
       const isOfficial = item.official === true;

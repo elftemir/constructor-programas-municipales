@@ -13,4 +13,7 @@ module.exports = async context => {
     if (actual !== expected) throw Error('Packaged OCR integrity mismatch: ' + file);
   }
   console.log('Verified packaged OCR runtime:', Object.keys(manifest.files).length, 'files');
+  const {assertArchiveHasNoTestContent,assertResourcesHaveNoTestContent}=require('./auditar_contenido_empaquetado');
+  assertArchiveHasNoTestContent(path.join(output,'resources/app.asar'));
+  assertResourcesHaveNoTestContent(path.join(output,'resources'));
 };

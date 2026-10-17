@@ -198,6 +198,10 @@ const PHRASES_CA_TO_ES = PHRASES_ES_TO_CA.map(([es, ca]) => [ca, es]);
 
 // 2. Diccionario de palabras clave (ES -> CA) con preservación semántica
 const WORDS_ES_TO_CA = {
+  "intervención": "intervenció",
+  "intervenciones": "intervencions",
+  "territorio": "territori",
+  "territorios": "territoris",
   // Artículos y contracciones
   "el": "el",
   "la": "la",

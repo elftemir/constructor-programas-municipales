@@ -66,21 +66,21 @@ const ProgramsView = {
   renderProjectCard(project, isActive = false) {
     const isCa = window.i18n && window.i18n.getLang() === 'ca';
     const stats = project.stats || {
-      total_marco: 123,
+      total_marco: 0,
       decididas: 0,
       progreso_pct: 0,
       incluidas: 0,
       adaptadas: 0,
       descartadas: 0,
       en_duda: 0,
-      sin_revisar: 123,
+      sin_revisar: 0,
       medidas_propias: 0
     };
 
     const updatedDate = new Date(project.updated_at).toLocaleDateString(isCa ? 'ca-ES' : 'es-ES', {
       day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
     });
-    const fuenteNombre = (this.sourcesMap && this.sourcesMap[project.fuente_id]) || 'Programa Marco 2027';
+    const fuenteNombre = (this.sourcesMap && this.sourcesMap[project.fuente_id]) || window.i18n.t('clean_start.no_active');
 
     return `
       <div class="project-card ${isActive ? 'last-active-card' : ''}" data-project-id="${project.id}" style="${isActive ? 'border-color: var(--action-primary); box-shadow: 0 4px 14px rgba(107,33,168,0.1);' : ''}">

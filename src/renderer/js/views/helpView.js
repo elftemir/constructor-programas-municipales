@@ -16,8 +16,8 @@ const HelpView = {
       id: 'faq-1',
       question_es: '¿Puedo inventar y añadir medidas propias no presentes en el marco?',
       question_ca: 'Puc inventar i afegir mesures pròpies no presents al marc?',
-      answer_es: 'Sí, totalmente. Desde "Áreas y medidas" pulsa en "+ Añadir medida propia". Podrás redactar una propuesta local desde cero y asignarla a cualquiera de las 12 áreas temáticas. Se incluirá automáticamente en la exportación oficial de Word.',
-      answer_ca: 'Sí, totalment. Des d\'"Àrees i mesures" prem a "+ Afegir mesura pròpia". Podràs redactar una proposta local des de zero i assignar-la a qualsevol de les 12 àrees temàtiques. S\'incorporarà automàticament a l\'exportació oficial de Word.',
+      answer_es: 'Sí, totalmente. Desde "Áreas y medidas" pulsa en "+ Añadir medida propia". Podrás redactar una propuesta local desde cero y asignarla a cualquiera de las áreas temáticas. Se incluirá automáticamente en la exportación oficial de Word.',
+      answer_ca: 'Sí, totalment. Des d\'"Àrees i mesures" prem a "+ Afegir mesura pròpia". Podràs redactar una proposta local des de zero i assignar-la a qualsevol de les àrees temàtiques. S\'incorporarà automàticament a l\'exportació oficial de Word.',
       category: 'measures'
     },
     {
@@ -256,8 +256,8 @@ const HelpView = {
       id: 'faq-export-1',
       question_es: '¿Qué contenidos se incluyen exactamente al exportar el programa electoral?',
       question_ca: 'Quins continguts s\'inclouen exactament en exportar el programa electoral?',
-      answer_es: 'El documento final exportado incluye la portada oficial con lema y logotipo local, el índice general, la presentación política de la candidatura, las 12 áreas temáticas con sus introducciones y propuestas aprobadas (incluidas y adaptadas), el texto de cierre y la contraportada. Las medidas marcadas "En duda" o "Descartadas" nunca se incluyen en la exportación.',
-      answer_ca: 'El document final exportat inclou la portada oficial amb lema i logotip local, l\'índex general, la presentació política de la candidatura, les 12 àrees temàtiques amb les seves introduccions i propostes aprovades (incloses i adaptades), el text de cloenda i la contraportada. Les mesures marcades "En dubte" o "Descartades" mai no s\'inclouen a l\'exportació.',
+      answer_es: 'El documento final exportado incluye la portada oficial con lema y logotipo local, el índice general, la presentación política de la candidatura, las áreas temáticas con sus introducciones y propuestas aprobadas (incluidas y adaptadas), el texto de cierre y la contraportada. Las medidas marcadas "En duda" o "Descartadas" nunca se incluyen en la exportación.',
+      answer_ca: 'El document final exportat inclou la portada oficial amb lema i logotip local, l\'índex general, la presentació política de la candidatura, les àrees temàtiques amb les seves introduccions i propostes aprovades (incloses i adaptades), el text de cloenda i la contraportada. Les mesures marcades "En dubte" o "Descartades" mai no s\'inclouen a l\'exportació.',
       category: 'export'
     },
     {

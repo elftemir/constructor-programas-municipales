@@ -1,0 +1,29 @@
+{
+  "version": "3.6.1",
+  "userVersion": 5,
+  "origin": "V3.6.1/codigo-fuente",
+  "schemaFile": "schema-3.6.1.sql",
+  "schemaSha256": "0754752be9f3c3536dfd30f45f380ff27f68c5d7f334a4ecb391c1482e2a66a9",
+  "migrations": [
+    {
+      "file": "src/main/db/migrations/001_initial_schema.js",
+      "sha256": "281cb3277f69cce5f358be14ec626b7c7aeacc8612fd51f1bd0627d744831bfa"
+    },
+    {
+      "file": "src/main/db/migrations/002_phase3_sources.js",
+      "sha256": "8d5385ed447d1beef3e57ddbcef5259a82a865a01d7db510784fe8b2e2a45763"
+    },
+    {
+      "file": "src/main/db/migrations/003_integrity_and_links.js",
+      "sha256": "e92425cd5403179aba09b2ea5026d43af8c8c30b2ed0cfd2c2bf624ad89298b2"
+    },
+    {
+      "file": "src/main/db/migrations/004_content_updates.js",
+      "sha256": "8991982ddd2861f9036f77274cf8053c57e6a87e78b0c10401d35e783fef4018"
+    },
+    {
+      "file": "src/main/db/migrations/005_ocr_metadata.js",
+      "sha256": "6f5cb2cd250bc43e230864c22a03c0f30ca793fcb126f80a4cb374424eb886bc"
+    }
+  ]
+}

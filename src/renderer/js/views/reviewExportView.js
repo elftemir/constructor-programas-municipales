@@ -12,6 +12,50 @@ const ReviewExportView = {
   lastExportResult: null,
   skippedUntitledIds: new Set(),
 
+  async prepareLemaExport(project, languages) {
+    const options = {};
+    for (const lang of window.Lema.missingLemaLanguages(project, languages)) {
+      const action = await this.promptMissingLema(lang);
+      if (action === 'write') {
+        await window.App.navigateTo('datos-basicos');
+        document.querySelector('#input-lema-' + lang)?.focus();
+        return null;
+      }
+      if (action === 'other') options[lang] = { lemaAlternativoConfirmado: true };
+      else if (action === 'translate') {
+        try { if (!await window.LemaUi.translate(project, lang)) return null; }
+        catch (err) { alert(err.message); return null; }
+      } else return null;
+    }
+    return options;
+  },
+
+  promptMissingLema(lang) {
+    const t = key => window.i18n.t(key);
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.innerHTML = `<div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="lema-export-title" style="max-width: 620px; padding: 24px;">
+        <div style="display: flex; justify-content: space-between; gap: 12px;">
+          <h2 id="lema-export-title">${t('lema.missing_title')}</h2>
+          <button class="btn small" data-lema-action="cancel" aria-label="${t('lema.close')}">×</button>
+        </div>
+        <p>${window.i18n.t('lema.missing_body', { lang: lang === 'es' ? t('lema.lang_es') : t('lema.lang_ca') })}</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px;">
+          <button class="btn primary" data-lema-action="translate">${t('lema.translate')}</button>
+          <button class="btn" data-lema-action="write">${t('lema.write_now')}</button>
+          <button class="btn" data-lema-action="other">${t('lema.use_other')}</button>
+        </div>
+      </div>`;
+      document.body.appendChild(overlay);
+      const finish = action => { overlay.remove(); document.removeEventListener('keydown', onKey); resolve(action); };
+      const onKey = event => { if (event.key === 'Escape') finish('cancel'); };
+      document.addEventListener('keydown', onKey);
+      overlay.querySelectorAll('[data-lema-action]').forEach(button => button.addEventListener('click', () => finish(button.dataset.lemaAction)));
+      overlay.querySelector('[data-lema-action="translate"]').focus();
+    });
+  },
+
   async render(container, project) {
     if (!project) return;
     this.skippedUntitledIds = new Set();
@@ -20,7 +64,7 @@ const ReviewExportView = {
     const isCa = lang === 'ca';
 
     const stats = project.stats || {
-      total_marco: 123,
+      total_marco: 0,
       decididas: 0,
       progreso_pct: 0,
       incluidas: 0,
@@ -32,7 +76,7 @@ const ReviewExportView = {
     };
 
     const totalExportable = stats.incluidas + stats.adaptadas + stats.medidas_propias;
-    const totalMarco = stats.total_marco || 123;
+    const totalMarco = stats.total_marco ?? 0;
     const incluidasOAdaptadas = stats.incluidas + stats.adaptadas;
     const noIncluidas = Math.max(0, totalMarco - incluidasOAdaptadas);
 
@@ -243,7 +287,7 @@ const ReviewExportView = {
             <div class="checklist-item">
               <span class="icon">${introsCount > 0 ? '✅' : '⚪'}</span>
               <div>
-                <div class="title">${window.i18n.t('review.intros_title', { count: introsCount })}</div>
+                <div class="title">${window.i18n.t('review.intros_title', { count: introsCount, total: (project.areas || []).length })}</div>
                 <div class="desc">${window.i18n.t('review.intros_desc')}</div>
               </div>
             </div>
@@ -530,6 +574,9 @@ const ReviewExportView = {
           targetLangs.push(project.idioma_principal || 'es');
         }
 
+        const lemaOptions = await this.prepareLemaExport(project, targetLangs);
+        if (!lemaOptions) return;
+
         if (targetLangs.includes('ca')) {
           const pendingCa = window.GeneralTextsView ? window.GeneralTextsView.getPendingGeneralTexts(project, 'ca') : [];
           if (pendingCa.length > 0) {
@@ -563,8 +610,8 @@ const ReviewExportView = {
 
           if (exportFormat === 'docx') {
             if (langMode === 'ambos') {
-              const res1 = await window.api.exportToDocx(project.id, { idioma: 'es', suffix: '_ES' });
-              const res2 = await window.api.exportToDocx(project.id, { idioma: 'ca', suffix: '_CA' });
+              const res1 = await window.api.exportToDocx(project.id, { idioma: 'es', suffix: '_ES', ...lemaOptions.es });
+              const res2 = await window.api.exportToDocx(project.id, { idioma: 'ca', suffix: '_CA', ...lemaOptions.ca });
               lastRes = {
                 isBoth: true,
                 pathEs: res1.filePath,
@@ -574,18 +621,18 @@ const ReviewExportView = {
               };
             } else if (langMode === 'secundario') {
               const secLang = project.idioma_principal === 'es' ? 'ca' : 'es';
-              const res = await window.api.exportToDocx(project.id, { idioma: secLang, suffix: `_${secLang.toUpperCase()}` });
+              const res = await window.api.exportToDocx(project.id, { idioma: secLang, suffix: `_${secLang.toUpperCase()}`, ...lemaOptions[secLang] });
               lastRes = { isBoth: false, filePath: res.filePath, warnings: res.warnings || [] };
             } else {
               const primLang = project.idioma_principal || 'es';
-              const res = await window.api.exportToDocx(project.id, { idioma: primLang, suffix: `_${primLang.toUpperCase()}` });
+              const res = await window.api.exportToDocx(project.id, { idioma: primLang, suffix: `_${primLang.toUpperCase()}`, ...lemaOptions[primLang] });
               lastRes = { isBoth: false, filePath: res.filePath, warnings: res.warnings || [] };
             }
           } else {
             // PDF o Ambos (Word + PDF)
             if (langMode === 'ambos') {
-              const res1 = await window.api.exportToPdf(project.id, { idioma: 'es', suffix: '_ES' });
-              const res2 = await window.api.exportToPdf(project.id, { idioma: 'ca', suffix: '_CA' });
+              const res1 = await window.api.exportToPdf(project.id, { idioma: 'es', suffix: '_ES', ...lemaOptions.es });
+              const res2 = await window.api.exportToPdf(project.id, { idioma: 'ca', suffix: '_CA', ...lemaOptions.ca });
               lastRes = {
                 isBoth: true,
                 pathEs: res1.docxPath,
@@ -599,7 +646,7 @@ const ReviewExportView = {
               };
             } else if (langMode === 'secundario') {
               const secLang = project.idioma_principal === 'es' ? 'ca' : 'es';
-              const res = await window.api.exportToPdf(project.id, { idioma: secLang, suffix: `_${secLang.toUpperCase()}` });
+              const res = await window.api.exportToPdf(project.id, { idioma: secLang, suffix: `_${secLang.toUpperCase()}`, ...lemaOptions[secLang] });
               lastRes = {
                 isBoth: false,
                 filePath: res.docxPath,
@@ -609,7 +656,7 @@ const ReviewExportView = {
               };
             } else {
               const primLang = project.idioma_principal || 'es';
-              const res = await window.api.exportToPdf(project.id, { idioma: primLang, suffix: `_${primLang.toUpperCase()}` });
+              const res = await window.api.exportToPdf(project.id, { idioma: primLang, suffix: `_${primLang.toUpperCase()}`, ...lemaOptions[primLang] });
               lastRes = {
                 isBoth: false,
                 filePath: res.docxPath,
@@ -704,7 +751,7 @@ const ReviewExportView = {
   },
 
   /**
-   * Revisa secuencialmente todas las medidas en estado 'en_duda' a lo largo de las 12 áreas
+   * Revisa secuencialmente todas las medidas en estado 'en_duda' a lo largo de las áreas
    */
   openDoubtReviewModal(project) {
     // Collect all measures in doubt
@@ -1198,7 +1245,7 @@ const ReviewExportView = {
           if (statusEl) statusEl.innerHTML = `⏳ ${isCa ? 'Generant títol amb IA local…' : 'Generando título con IA local…'}`;
 
           try {
-            const res = await window.api.aiSuggestTitles({
+            const res = await (window.GenerationApi || window.api).aiSuggestTitles({
               texto: bodyText,
               tituloActual: '',
               municipio: project.municipio || '',
@@ -1213,6 +1260,7 @@ const ReviewExportView = {
 
             if (titulos.length > 0 && titulos[0].trim()) {
               titleInput.value = titulos[0].trim();
+              window.GenerationUi?.markResult(res,titleInput);
               if (statusEl) statusEl.innerHTML = `💡 ${isCa ? 'Proposta IA generada' : 'Propuesta IA generada'}`;
             } else {
               if (statusEl) statusEl.innerHTML = `⚠️ ${isCa ? 'No s\'ha pogut generar títol automàtic' : 'No se ha podido generar título automático'}`;

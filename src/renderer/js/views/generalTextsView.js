@@ -8,6 +8,17 @@ const GeneralTextsView = {
     cierre: 'propio'
   },
   debounceTimer: null,
+  generationResults: new Map(),
+
+  hasPendingRepair(project){
+    const lang=this.currentLang||project.idioma_principal||'es';
+    return window.TextFormat.repairDocument(project.textos_generales||{}).changes.some(change=>change.section===this.currentSubSection&&(change.lang===lang||(change.lang==='legacy'&&lang===(project.idioma_principal||'es')))&&(change.section!=='introducciones'||change.areaId===this.selectedIntroAreaId));
+  },
+
+  rememberGeneration(projectId,section,lang,areaId,response) {
+    if(!response?.generation||response.ok===false)return;
+    this.generationResults.set([projectId,section,lang,areaId||''].join('|'),{ok:true,generation:response.generation});
+  },
 
   async render(container, project) {
     if (!project) return;
@@ -27,6 +38,10 @@ const GeneralTextsView = {
     };
 
     const isCa = window.i18n && window.i18n.getLang() === 'ca';
+    const repairInfo=window.TextFormat.repairDocument(textos);
+    const visibleTexts=repairInfo.changed?repairInfo.texts:textos;
+    const incompleteNotice=repairInfo.changes.some(c=>c.incomplete)?`<p>${window.i18n.t('ai.cutRepair')}</p>`:'';
+    const repairBanner=repairInfo.changed?`<div class="notice warning" id="text-format-repair-notice"><b>${isCa?'Aquest text té un format intern incorrecte. Vols corregir-lo?':'Este texto tiene un formato interno incorrecto. ¿Quieres corregirlo?'}</b><p>${isCa?'Es mostra una vista amb format normal; encara no s’ha desat. Abans de corregir-lo es farà una còpia de seguretat.':'Se muestra una vista con formato normal; todavía no se ha guardado. Antes de corregirlo se hará una copia de seguridad.'}</p>${incompleteNotice}<button class="btn" id="btn-repair-internal-json">${isCa?'Corregir el format':'Corregir el formato'}</button><button class="btn" id="btn-keep-internal-json">${isCa?'No modificar':'No modificar'}</button></div>`:'';
     const pLang = project.idioma_principal || 'es';
     const curLang = this.currentLang || pLang;
     const pendingCurrent = this.getPendingGeneralTexts(project, curLang);
@@ -71,10 +86,11 @@ const GeneralTextsView = {
         </div>
       </div>
 
+      ${repairBanner}
       ${pendingBannerHtml}
 
       <div id="general-text-body-container">
-        ${this.renderSubSection(project, textos)}
+        ${this.renderSubSection(project, visibleTexts)}
       </div>
 
       <div class="notice info" style="margin-top: 24px;">
@@ -82,7 +98,19 @@ const GeneralTextsView = {
       </div>
     `;
 
+    const origin=this.generationResults.get([project.id,this.currentSubSection,this.currentLang,this.currentSubSection==='introducciones'?this.selectedIntroAreaId:''].join('|'));
+    for(const selector of ['#input-pres-titulo','#input-pres-entradilla','#input-pres-cuerpo','#input-intro-cuerpo','#input-intro-frase','#input-cierre-titulo','#input-cierre-cuerpo'])window.GenerationUi?.markResult(origin,container.querySelector(selector));
     this.bindEvents(container, project, textos);
+    if(repairInfo.changed){
+      const affected=this.hasPendingRepair(project);
+      if(affected)container.querySelectorAll('#general-text-body-container input,#general-text-body-container textarea').forEach(input=>{input.readOnly=true;input.title=isCa?'Confirma la correcció del format abans d’editar aquest text.':'Confirma la corrección del formato antes de editar este texto.';});
+      container.querySelector('#btn-keep-internal-json')?.addEventListener('click',()=>{container.querySelector('#text-format-repair-notice').hidden=true;});
+      container.querySelector('#btn-repair-internal-json')?.addEventListener('click',async()=>{
+        if(!window.confirm(isCa?'Vols corregir el format? Es conservarà una còpia de seguretat abans del canvi.':'¿Quieres corregir el formato? Se conservará una copia de seguridad antes del cambio.'))return;
+        await window.api.updateGeneralTexts(project.id,{repairInternalJson:true,userConfirmed:true});
+        const updated=await window.api.getProject(project.id);App.currentProject=updated;await this.render(container,updated);
+      });
+    }
   },
 
   getPendingGeneralTexts(project, targetLang) {
@@ -124,7 +152,7 @@ const GeneralTextsView = {
   },
 
   async batchTranslatePending(project, targetLang = 'ca', onProgress = null) {
-    if (!window.api || (!window.api.aiTranslateStructuredText && !window.api.aiTranslateText)) return false;
+    if (!window.api || (!(window.GenerationApi || window.api).aiTranslateStructuredText && !(window.GenerationApi || window.api).aiTranslateText)) return false;
     const sourceLang = targetLang === 'ca' ? 'es' : 'ca';
     const textos = project.textos_generales ? JSON.parse(JSON.stringify(project.textos_generales)) : {};
     if (!textos.presentacion) textos.presentacion = { es: {}, ca: {} };
@@ -172,11 +200,12 @@ const GeneralTextsView = {
           parrafos: task.src.parrafos || []
         };
         try {
-          const res = await window.api.aiTranslateStructuredText({ objeto: objToTranslate, de: sourceLang, a: targetLang });
+          const res = await (window.GenerationApi || window.api).aiTranslateStructuredText({ projectId:project.id, generationTask:window.WritingContract.SECTION_TASK[task.type==="intro"?"introducciones":task.type], areaId:task.areaId, selectedMeasures:window.WritingContract.selectedMeasures(project,targetLang,task.type==="intro"?task.areaId:null), idioma:targetLang, objeto:objToTranslate, de:sourceLang, a:targetLang });
+          this.rememberGeneration(project.id,task.type==='intro'?'introducciones':task.type,targetLang,task.areaId,res);
           const resData = res?.data || res;
           if (resData && (resData.entradilla || (resData.parrafos && resData.parrafos.length > 0))) {
             textos.presentacion[targetLang] = {
-              titulo: resData.titulo || (targetLang === 'ca' ? 'Un projecte comú per als barris i els serveis públics' : 'Un proyecto común para los barrios y los servicios públicos'),
+              titulo: resData.titulo || '',
               entradilla: resData.entradilla || '',
               parrafos: Array.isArray(resData.parrafos) ? resData.parrafos : [],
               estado: 'propuesta'
@@ -191,7 +220,8 @@ const GeneralTextsView = {
           frase_destacada: task.src.frase_destacada || ''
         };
         try {
-          const res = await window.api.aiTranslateStructuredText({ objeto: objToTranslate, de: sourceLang, a: targetLang });
+          const res = await (window.GenerationApi || window.api).aiTranslateStructuredText({ projectId:project.id, generationTask:window.WritingContract.SECTION_TASK[task.type==="intro"?"introducciones":task.type], areaId:task.areaId, selectedMeasures:window.WritingContract.selectedMeasures(project,targetLang,task.type==="intro"?task.areaId:null), idioma:targetLang, objeto:objToTranslate, de:sourceLang, a:targetLang });
+          this.rememberGeneration(project.id,task.type==='intro'?'introducciones':task.type,targetLang,task.areaId,res);
           const resData = res?.data || res;
           if (resData && (resData.entradilla || resData.texto)) {
             if (!textos.introducciones_areas[aid]) textos.introducciones_areas[aid] = { es: {}, ca: {} };
@@ -209,11 +239,12 @@ const GeneralTextsView = {
           parrafos: task.src.parrafos || []
         };
         try {
-          const res = await window.api.aiTranslateStructuredText({ objeto: objToTranslate, de: sourceLang, a: targetLang });
+          const res = await (window.GenerationApi || window.api).aiTranslateStructuredText({ projectId:project.id, generationTask:window.WritingContract.SECTION_TASK[task.type==="intro"?"introducciones":task.type], areaId:task.areaId, selectedMeasures:window.WritingContract.selectedMeasures(project,targetLang,task.type==="intro"?task.areaId:null), idioma:targetLang, objeto:objToTranslate, de:sourceLang, a:targetLang });
+          this.rememberGeneration(project.id,task.type==='intro'?'introducciones':task.type,targetLang,task.areaId,res);
           const resData = res?.data || res;
           if (resData && (resData.parrafos && resData.parrafos.length > 0)) {
             textos.cierre[targetLang] = {
-              titulo: resData.titulo || (targetLang === 'ca' ? 'El nostre compromís: fets, paraula i futur' : 'Nuestro compromiso: hechos, palabra y futuro'),
+              titulo: resData.titulo || '',
               parrafos: Array.isArray(resData.parrafos) ? resData.parrafos : [],
               estado: 'propuesta'
             };
@@ -242,7 +273,7 @@ const GeneralTextsView = {
       error_traduccion: { text: isCa ? 'Error de traducció' : 'Error de traducción', bg: '#fee2e2', color: '#b91c1c' }
     };
     const item = map[estado] || map.sin_traduccion;
-    return `<span class="chip" style="background:${item.bg}; color:${item.color}; font-size:11.5px; font-weight:700; padding:3px 8px; border-radius:4px;">${item.text}</span>`;
+    return `<span class="chip" style="background:${item.bg}; color:${item.color}; font-size:11.5px; font-weight:700; padding:3px 8px; border-radius:4px;">${item.text}</span>${estado==='desactualizada'?` <button class="btn small" data-update-translation>${isCa?'Actualitzar traducció':'Actualizar traducción'}</button>`:''}`;
   },
 
   renderSubSection(project, textos) {
@@ -288,7 +319,7 @@ const GeneralTextsView = {
               <!-- Toggle Modo Propio / Modo IA -->
               <div style="display: flex; background: var(--surface-muted); padding: 3px; border-radius: var(--radius-default); border: 1px solid var(--border-subtle);">
                 <button class="btn small ${!isAi ? 'primary' : 'link'}" id="toggle-pres-propio" style="${!isAi ? '' : 'color: var(--text-secondary);'}">✍️ ${isCa ? 'Text propi' : 'Texto propio'}</button>
-                <button class="btn small ${isAi ? 'primary' : 'link'}" id="toggle-pres-ia" style="${isAi ? '' : 'color: var(--text-secondary);'}">🤖 ${isCa ? 'Suggeriment IA (Fase 2)' : 'Sugerencia IA (Fase 2)'}</button>
+                <button class="btn small ${isAi ? 'primary' : 'link'}" id="toggle-pres-ia" style="${isAi ? '' : 'color: var(--text-secondary);'}">🤖 ${isCa ? 'Suggeriment IA' : 'Sugerencia IA'}</button>
               </div>
             </div>
           </div>
@@ -361,7 +392,7 @@ const GeneralTextsView = {
               <!-- Toggle Modo Propio / Modo IA -->
               <div style="display: flex; background: var(--surface-muted); padding: 3px; border-radius: var(--radius-default); border: 1px solid var(--border-subtle);">
                 <button class="btn small ${!isAi ? 'primary' : 'link'}" id="toggle-intro-propio" style="${!isAi ? '' : 'color: var(--text-secondary);'}">✍️ ${isCa ? 'Text propi' : 'Texto propio'}</button>
-                <button class="btn small ${isAi ? 'primary' : 'link'}" id="toggle-intro-ia" style="${isAi ? '' : 'color: var(--text-secondary);'}">🤖 ${isCa ? 'Suggeriment IA (Fase 2)' : 'Sugerencia IA (Fase 2)'}</button>
+                <button class="btn small ${isAi ? 'primary' : 'link'}" id="toggle-intro-ia" style="${isAi ? '' : 'color: var(--text-secondary);'}">🤖 ${isCa ? 'Suggeriment IA' : 'Sugerencia IA'}</button>
               </div>
             </div>
           </div>
@@ -449,7 +480,7 @@ const GeneralTextsView = {
               <!-- Toggle Modo Propio / Modo IA -->
               <div style="display: flex; background: var(--surface-muted); padding: 3px; border-radius: var(--radius-default); border: 1px solid var(--border-subtle);">
                 <button class="btn small ${!isAi ? 'primary' : 'link'}" id="toggle-cierre-propio" style="${!isAi ? '' : 'color: var(--text-secondary);'}">✍️ ${isCa ? 'Text propi' : 'Texto propio'}</button>
-                <button class="btn small ${isAi ? 'primary' : 'link'}" id="toggle-cierre-ia" style="${isAi ? '' : 'color: var(--text-secondary);'}">🤖 ${isCa ? 'Suggeriment IA (Fase 2)' : 'Sugerencia IA (Fase 2)'}</button>
+                <button class="btn small ${isAi ? 'primary' : 'link'}" id="toggle-cierre-ia" style="${isAi ? '' : 'color: var(--text-secondary);'}">🤖 ${isCa ? 'Suggeriment IA' : 'Sugerencia IA'}</button>
               </div>
             </div>
           </div>
@@ -488,6 +519,11 @@ const GeneralTextsView = {
 
   renderAiPreparationCard(sectionKey, sectionLabel, project, area = null) {
     const isCa = window.i18n && window.i18n.getLang() === 'ca';
+    const generationTask=window.WritingContract.SECTION_TASK[sectionKey];
+    const draftingLang=this.currentLang||project.idioma_principal||'es';
+    const selection=window.WritingContract.selectedMeasures(project,draftingLang,area?.id);
+    const minimum=window.WritingContract.minimumState(generationTask,selection,isCa?'ca':'es');
+    const longMinimum=window.WritingContract.minimumState(generationTask,selection,isCa?'ca':'es',{longitud:'estandar'});
     let contextNote = '';
     let btnText = '';
     let btnId = '';
@@ -506,8 +542,8 @@ const GeneralTextsView = {
             <input type="radio" name="pres-length" value="corta" checked />
             ${isCa ? 'Curta (220–300 paraules)' : 'Corta (220–300 palabras)'}
           </label>
-          <label style="font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-            <input type="radio" name="pres-length" value="estandar" />
+          <label title="${escapeHtml(longMinimum.message)}" style="font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+            <input type="radio" name="pres-length" value="estandar" ${longMinimum.allowed?'':'disabled'} title="${escapeHtml(longMinimum.message)}" />
             ${isCa ? 'Estàndard (350–500 paraules)' : 'Estándar (350–500 palabras)'}
           </label>
         </div>
@@ -553,10 +589,11 @@ const GeneralTextsView = {
             ${extraControls}
 
             <div style="display: flex; gap: 12px; align-items: center;">
-              <button class="btn primary" id="${btnId}" style="background: #7c3aed; font-weight: 700; padding: 10px 18px;">
+              <button class="btn primary" id="${btnId}" ${minimum.allowed?'':'disabled'} title="${escapeHtml(minimum.message)}" style="background: #7c3aed; font-weight: 700; padding: 10px 18px;">
                 ${btnText}
               </button>
             </div>
+            ${minimum.allowed?'':`<div class="notice">${escapeHtml(minimum.message)} <button class="btn small" data-writing-go-measures>${isCa?'Anar a Àrees i mesures':'Ir a Áreas y medidas'}</button></div>`}
           </div>
         </div>
 
@@ -569,6 +606,11 @@ const GeneralTextsView = {
 
   bindEvents(container, project, textos) {
     const isCa = window.i18n && window.i18n.getLang() === 'ca';
+    const writingTask=window.WritingContract.SECTION_TASK[this.currentSubSection];
+    const selectedMeasures=window.WritingContract.selectedMeasures(project,this.currentLang||project.idioma_principal||'es',this.currentSubSection==='introducciones'?this.selectedIntroAreaId:null);
+    const writingMinimum=window.WritingContract.minimumState(writingTask,selectedMeasures,isCa?'ca':'es');
+    container.querySelectorAll('[data-writing-go-measures]').forEach(button=>button.addEventListener('click',()=>App.navigateTo('areas-medidas')));
+    // Translation needs an existing text, never a minimum number of selected measures.
     const curLang = this.currentLang || project.idioma_principal || 'es';
     const oppLang = curLang === 'ca' ? 'es' : 'ca';
 
@@ -659,6 +701,7 @@ const GeneralTextsView = {
     }
 
     // Botón de traducción completa de la sección con IA
+    container.querySelectorAll('[data-update-translation]').forEach(button=>button.addEventListener('click',()=>container.querySelector('#btn-translate-sec-ia')?.click()));
     const btnTranslateSec = container.querySelector('#btn-translate-sec-ia');
     if (btnTranslateSec) {
       btnTranslateSec.addEventListener('click', () => {
@@ -703,12 +746,14 @@ const GeneralTextsView = {
           taskTitle,
           taskMethod: 'aiTranslateStructuredText',
           taskParams: {
+            projectId:project.id,generationTask:writingTask,selectedMeasures,areaId:this.currentSubSection==='introducciones'?this.selectedIntroAreaId:null,idioma:curLang,
             objeto: objToTranslate,
             de: oppLang,
             a: curLang
           },
           originalText,
           onAccept: async (result) => {
+            this.rememberGeneration(project.id,this.currentSubSection,curLang,this.currentSubSection==='introducciones'?this.selectedIntroAreaId:null,result);
             const resData = result.data || result;
             const updatedTextos = JSON.parse(JSON.stringify(textos));
 
@@ -796,10 +841,13 @@ const GeneralTextsView = {
           taskTitle: isCa ? 'Redacció de presentació política amb IA' : 'Redacción de presentación política con IA',
           taskMethod: 'aiDraftPresentation',
           taskParams: {
+            projectId:project.id,generationTask:writingTask,selectedMeasures,
             municipio: project.municipio || '',
             partido: project.partido || 'Podemos',
             organizacion: project.partido || 'Podemos',
-            lema: project.lema || '',
+            lema: window.Lema.getLema(project, curLang) || '',
+            lema_es: window.Lema.getLema(project, 'es'),
+            lema_ca: window.Lema.getLema(project, 'ca'),
             habitantes: project.habitantes || null,
             idioma: curLang,
             longitud: longitud === 'corta' ? 'corta' : 'estandar',
@@ -809,6 +857,7 @@ const GeneralTextsView = {
           },
           originalText: currentFull,
           onAccept: async (result) => {
+            this.rememberGeneration(project.id,this.currentSubSection,curLang,this.currentSubSection==='introducciones'?this.selectedIntroAreaId:null,result);
             const resData = result.data || result;
             let titulo = stripMd(result.titulo || resData.titulo);
             let entradilla = stripMd(result.entradilla || resData.entradilla || '');
@@ -818,21 +867,7 @@ const GeneralTextsView = {
                   ? resData.parrafos.map(stripMd)
                   : []);
 
-            if (parrafos.length === 0 || (result.texto && result.texto !== [entradilla, ...parrafos].filter(Boolean).join('\n\n'))) {
-              const fullText = (result.texto || '').trim();
-              const pars = fullText.split(/\n\s*\n/).map(stripMd).filter(Boolean);
-              if (pars.length > 1) {
-                entradilla = pars[0];
-                parrafos = pars.slice(1);
-              } else if (pars.length === 1) {
-                if (!entradilla) {
-                  entradilla = pars[0];
-                  parrafos = [];
-                } else {
-                  parrafos = pars;
-                }
-              }
-            }
+            ({titulo,entradilla,parrafos}=window.WritingContract.presentationFields({titulo,entradilla,parrafos}));
 
             const forbiddenTitles = /^(?:Carta de Presentaci[óo]n|Presentaci[óo]n|Apertura|Cierre|Tancament|Conclusi[óo]n)[\s,:\.]*$/i;
             if (!titulo || forbiddenTitles.test(titulo.trim())) {
@@ -907,6 +942,7 @@ const GeneralTextsView = {
           taskTitle: isCa ? `Introducció d'àrea: ${area.nombre}` : `Introducción de área: ${area.nombre}`,
           taskMethod: 'aiDraftAreaIntro',
           taskParams: {
+            projectId:project.id,areaId:area.id,generationTask:'redactar_introduccion_area',selectedMeasures,
             area: curLang === 'ca' ? (area.nombre_ca || area.nombre) : area.nombre,
             area_nombre: curLang === 'ca' ? (area.nombre_ca || area.nombre) : area.nombre,
             municipio: project.municipio || '',
@@ -915,6 +951,7 @@ const GeneralTextsView = {
           },
           originalText: currentIntro,
           onAccept: async (result) => {
+            this.rememberGeneration(project.id,this.currentSubSection,curLang,this.currentSubSection==='introducciones'?this.selectedIntroAreaId:null,result);
             const cleanTag = (str) => {
               if (!str) return '';
               return stripMd(str)
@@ -1031,15 +1068,19 @@ const GeneralTextsView = {
           taskTitle: isCa ? 'Redacció de tancament del programa amb IA' : 'Redacción de cierre del programa con IA',
           taskMethod: 'aiDraftClosing',
           taskParams: {
+            projectId:project.id,generationTask:'redactar_cierre',selectedMeasures,
             municipio: project.municipio || '',
             partido: project.partido || 'Podemos',
             organizacion: project.partido || 'Podemos',
-            lema: project.lema || '',
+            lema: window.Lema.getLema(project, curLang) || '',
+            lema_es: window.Lema.getLema(project, 'es'),
+            lema_ca: window.Lema.getLema(project, 'ca'),
             medidas_resumen: prioridadesContext.slice(0, 6),
             idioma: curLang
           },
           originalText: currentFull,
           onAccept: async (result) => {
+            this.rememberGeneration(project.id,this.currentSubSection,curLang,this.currentSubSection==='introducciones'?this.selectedIntroAreaId:null,result);
             const resData = result.data || result;
             let titulo = stripMd(result.titulo || resData.titulo);
             let parrafos = Array.isArray(result.parrafos) && result.parrafos.length > 0
@@ -1130,6 +1171,9 @@ const GeneralTextsView = {
   },
 
   async saveData(project, textosOverride = null) {
+    // The formatted read-only preview is never serialized by Save/autosave.
+    // A new explicitly accepted proposal can replace it through textosOverride.
+    if(!textosOverride&&this.hasPendingRepair(project))return;
     let textosToSave = textosOverride;
     const curLang = this.currentLang || project.idioma_principal || 'es';
     const isMainLang = curLang === (project.idioma_principal || 'es');
@@ -1251,9 +1295,31 @@ const GeneralTextsView = {
     });
   },
 
+  askUpdateTranslation(targetLang){
+    const ca=window.i18n.getLang()==='ca',language=targetLang==='ca'?(ca?'català':'catalán'):(ca?'castellà':'castellano');
+    return new Promise(resolve=>{const box=document.querySelector('#modal-container')||document.body,overlay=document.createElement('div');overlay.className='modal-overlay';overlay.id='update-translation-question';
+      overlay.innerHTML='<div class="modal-dialog"><div class="modal-body"><p>'+escapeHtml(ca?'Vols actualitzar també la versió en '+language+'? Substituirà el text actual.':'¿Actualizar también la versión en '+language+'? Sustituirá el texto actual.')+'</p></div><div class="modal-footer"><button class="btn" data-keep>'+(ca?'Mantenir':'Mantener')+'</button><button class="btn primary" data-update>'+(ca?'Actualitzar':'Actualizar')+'</button></div></div>';
+      box.appendChild(overlay);box.style.display='block';const done=value=>{overlay.remove();box.style.display='none';resolve(value);};overlay.querySelector('[data-update]').onclick=()=>done(true);overlay.querySelector('[data-keep]').onclick=()=>done(false);
+    });
+  },
+  proposeSecondaryTranslation(project,section,fromLang,targetLang,data){
+    const ca=window.i18n.getLang()==='ca',areaId=data.areaId,source=section==='introducciones'?{entradilla:data.entradilla||'',texto:data.texto||'',frase_destacada:data.frase_destacada||''}:section==='cierre'?{titulo:data.titulo||'',parrafos:data.parrafos||[]}:{titulo:data.titulo||'',entradilla:data.entradilla||'',parrafos:data.parrafos||[]};
+    AiModalHelper.showProposalModal({taskTitle:ca?'Actualitzar traducció':'Actualizar traducción',taskMethod:'aiTranslateStructuredText',taskParams:{projectId:project.id,generationTask:window.WritingContract.SECTION_TASK[section],areaId,idioma:targetLang,objeto:source,de:fromLang,a:targetLang},originalText:window.TextFormat.display(section,section==='introducciones'?project.textos_generales?.introducciones_areas?.[areaId]?.[targetLang]:project.textos_generales?.[section]?.[targetLang]),onAccept:async result=>{
+      const tokenKey=section==='introducciones'?'intro_'+areaId+'_'+targetLang:section+'_'+targetLang;
+      if(data.token&&this.activeTranslationTokens?.[tokenKey]!==data.token){window.alert(ca?'El text ha canviat mentre es traduïa. Torna a actualitzar la traducció.':'El texto ha cambiado mientras se traducía. Vuelve a actualizar la traducción.');return;}
+      const fresh=await window.api.getProject(project.id),texts=JSON.parse(JSON.stringify(fresh.textos_generales||{})),value={...(result.data||result),estado:'propuesta'};
+      const fields=section==='introducciones'?['entradilla','texto','frase_destacada']:section==='cierre'?['titulo','parrafos']:['titulo','entradilla','parrafos'];const clean=Object.fromEntries(fields.map(field=>[field,value[field]||(field==='parrafos'?[]:'')]));clean.estado='propuesta';
+      if(section==='introducciones'){texts.introducciones_areas||={};texts.introducciones_areas[areaId]||={};texts.introducciones_areas[areaId][targetLang]=clean;}else{texts[section]||={};texts[section][targetLang]=clean;}
+      this.rememberGeneration(project.id,section,targetLang,areaId,result);await this.saveData(fresh,texts);const reloaded=await window.api.getProject(project.id);Object.assign(project,reloaded);const app=typeof App!=='undefined'?App:window.App;if(app?.currentProject?.id===project.id)app.currentProject=reloaded;this.currentLang=targetLang;await this.render(document.querySelector('#main-content'),reloaded);
+    }});
+  },
+
   async autoTranslateSecondary(project, section, curLang, data, updatedTextos) {
-    if (!window.api || (!window.api.aiTranslateStructuredText && !window.api.aiTranslateText)) return false;
+    if (!window.api || (!(window.GenerationApi || window.api).aiTranslateStructuredText && !(window.GenerationApi || window.api).aiTranslateText)) return false;
     const oppLang = curLang === 'ca' ? 'es' : 'ca';
+    const previous=section==='introducciones'?updatedTextos.introducciones_areas?.[data.areaId]?.[oppLang]:updatedTextos[section]?.[oppLang];
+    const hasWrittenText=previous&&([previous.entradilla,previous.texto,previous.frase_destacada,...(previous.parrafos||[])].some(s=>String(s||'').trim())||(previous.titulo&&!['Presentación','Presentació','Cierre','Tancament'].includes(previous.titulo)));
+    if(hasWrittenText){previous.estado='desactualizada';await this.saveData(project,updatedTextos);if(await this.askUpdateTranslation(oppLang))this.proposeSecondaryTranslation(project,section,curLang,oppLang,data);return true;}
     const tokenKey = section === 'introducciones' ? `intro_${data.areaId}_${oppLang}` : `${section}_${oppLang}`;
     const token = data.token;
 
@@ -1264,7 +1330,8 @@ const GeneralTextsView = {
           entradilla: data.entradilla || '',
           parrafos: data.parrafos || []
         };
-        const res = await window.api.aiTranslateStructuredText({
+        const res = await (window.GenerationApi || window.api).aiTranslateStructuredText({
+          projectId:project.id,generationTask:window.WritingContract.SECTION_TASK[section],areaId:data.areaId,selectedMeasures:window.WritingContract.selectedMeasures(project,oppLang,section==="introducciones"?data.areaId:null),idioma:oppLang,
           objeto: objToTranslate,
           de: curLang,
           a: oppLang
@@ -1277,11 +1344,12 @@ const GeneralTextsView = {
           console.warn('[AutoTranslate] Error al traducir presentación:', res.error);
           return false;
         }
+        this.rememberGeneration(project.id,section,oppLang,data.areaId,res);
         const resData = res?.data || res;
         if (resData && (resData.entradilla || (resData.parrafos && resData.parrafos.length > 0))) {
           if (!updatedTextos.presentacion) updatedTextos.presentacion = { es: {}, ca: {} };
           updatedTextos.presentacion[oppLang] = {
-            titulo: resData.titulo || (oppLang === 'ca' ? 'Un projecte comú per als barris i els serveis públics' : 'Un proyecto común para los barrios y los servicios públicos'),
+            titulo: resData.titulo || '',
             entradilla: resData.entradilla || '',
             parrafos: Array.isArray(resData.parrafos) ? resData.parrafos : [],
             estado: 'propuesta'
@@ -1295,7 +1363,8 @@ const GeneralTextsView = {
           texto: data.texto || '',
           frase_destacada: data.frase_destacada || ''
         };
-        const res = await window.api.aiTranslateStructuredText({
+        const res = await (window.GenerationApi || window.api).aiTranslateStructuredText({
+          projectId:project.id,generationTask:window.WritingContract.SECTION_TASK[section],areaId:data.areaId,selectedMeasures:window.WritingContract.selectedMeasures(project,oppLang,section==="introducciones"?data.areaId:null),idioma:oppLang,
           objeto: objToTranslate,
           de: curLang,
           a: oppLang
@@ -1308,6 +1377,7 @@ const GeneralTextsView = {
           console.warn(`[AutoTranslate] Error al traducir intro ${areaId}:`, res.error);
           return false;
         }
+        this.rememberGeneration(project.id,section,oppLang,data.areaId,res);
         const resData = res?.data || res;
         if (resData && (resData.entradilla || resData.texto)) {
           if (!updatedTextos.introducciones_areas) updatedTextos.introducciones_areas = {};
@@ -1325,7 +1395,8 @@ const GeneralTextsView = {
           titulo: data.titulo || '',
           parrafos: data.parrafos || []
         };
-        const res = await window.api.aiTranslateStructuredText({
+        const res = await (window.GenerationApi || window.api).aiTranslateStructuredText({
+          projectId:project.id,generationTask:window.WritingContract.SECTION_TASK[section],areaId:data.areaId,selectedMeasures:window.WritingContract.selectedMeasures(project,oppLang,section==="introducciones"?data.areaId:null),idioma:oppLang,
           objeto: objToTranslate,
           de: curLang,
           a: oppLang
@@ -1338,11 +1409,12 @@ const GeneralTextsView = {
           console.warn('[AutoTranslate] Error al traducir cierre:', res.error);
           return false;
         }
+        this.rememberGeneration(project.id,section,oppLang,data.areaId,res);
         const resData = res?.data || res;
         if (resData && (resData.parrafos && resData.parrafos.length > 0)) {
           if (!updatedTextos.cierre) updatedTextos.cierre = { es: {}, ca: {} };
           updatedTextos.cierre[oppLang] = {
-            titulo: resData.titulo || (oppLang === 'ca' ? 'El nostre compromís: fets, paraula i futur' : 'Nuestro compromiso: hechos, palabra y futuro'),
+            titulo: resData.titulo || '',
             parrafos: Array.isArray(resData.parrafos) ? resData.parrafos : [],
             estado: 'propuesta'
           };

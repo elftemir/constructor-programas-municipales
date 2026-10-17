@@ -1,5 +1,5 @@
 {
-  "catalogVersion": "2.0.0-fase2",
+  "catalogVersion": "3.8.1",
   "defaultEngine": "llama.cpp",
   "models": [
     {
@@ -16,7 +16,13 @@
       "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
       "recommendedRamGB": 8,
       "recommended": true,
-      "description": "Perfil recomendado: equilibrio ideal entre precisión bilingüe (ES/CA), velocidad y consumo moderado de memoria."
+      "description": "Rápido y de menor consumo. Recomendado por defecto; para redacción en catalán, Qwen3 4B suele dar mejores resultados.",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/blob/main/LICENSE",
+      "licenseRestricted": false,
+      "revision": "91cad51170dc346986eccefdc2dd33a9da36ead9",
+      "downloadUrl": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/91cad51170dc346986eccefdc2dd33a9da36ead9/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "descriptionCa": "Ràpid i de menor consum. Recomanat per defecte; per redactar en català, Qwen3 4B sol donar millors resultats."
     },
     {
       "id": "qwen2.5-0.5b-instruct-q4",
@@ -32,23 +38,36 @@
       "sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
       "recommendedRamGB": 4,
       "recommended": false,
-      "description": "Perfil ligero: optimizado para ordenadores con menos de 4 GB de memoria RAM o recursos reducidos."
+      "description": "Perfil ligero: optimizado para ordenadores con menos de 4 GB de memoria RAM o recursos reducidos.",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/blob/main/LICENSE",
+      "licenseRestricted": false,
+      "downloadUrl": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf"
     },
     {
-      "id": "qwen2.5-3b-instruct-q4",
-      "name": "Qwen 2.5 3B Instruct (Alta precisión)",
+      "id": "qwen3-4b-instruct-2507-q4",
+      "name": "Qwen3 4B Instruct 2507",
       "provider": "huggingface",
-      "repoId": "Qwen/Qwen2.5-3B-Instruct-GGUF",
-      "filename": "qwen2.5-3b-instruct-q4_k_m.gguf",
-      "hfModel": "Qwen/Qwen2.5-3B-Instruct-GGUF:Q4_K_M",
+      "repoId": "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+      "revision": "a06e946bb6b655725eafa393f4a9745d460374c9",
+      "filename": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+      "hfModel": "unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M",
       "format": "GGUF",
       "quantization": "Q4_K_M",
       "engine": "llama.cpp",
-      "sizeBytes": 2104932768,
-      "sha256": "626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d",
+      "sizeBytes": 2497281120,
+      "sha256": "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597",
       "recommendedRamGB": 16,
       "recommended": false,
-      "description": "Perfil avanzado: máxima calidad en redacciones extensas y revisiones estilísticas para equipos con 8 GB o más de RAM."
+      "description": "Alta calidad. Recomendado para textos en catalán con GPU compatible o al menos 16 GB de RAM.",
+      "descriptionCa": "Alta qualitat. Recomanat per a textos en català amb GPU compatible o almenys 16 GB de RAM.",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/blob/main/LICENSE",
+      "licenseRestricted": false,
+      "baseModel": "Qwen/Qwen3-4B-Instruct-2507",
+      "quantizer": "Unsloth",
+      "thinking": false,
+      "downloadUrl": "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/a06e946bb6b655725eafa393f4a9745d460374c9/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
     }
   ]
 }

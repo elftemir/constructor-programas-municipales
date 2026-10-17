@@ -10,6 +10,7 @@ const SourceProgramsView = {
   async render(container) {
     const isCa = window.i18n ? window.i18n.getLang() === 'ca' : false;
     this.sources = await window.api.getSourcePrograms(true);
+    const contentStatus = await window.api.getContentUpdateStatus?.();
 
     const filteredSources = this.showArchived
       ? this.sources
@@ -21,7 +22,7 @@ const SourceProgramsView = {
       <div class="view-header" style="margin-bottom: 24px;">
         <div class="view-header-left">
           <div class="label" style="color: #7c3aed; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-size: 11.5px;">
-            ${isCa ? 'Fase 3.1 · Gestió de fonts' : 'Fase 3.1 · Gestión de fuentes'}
+            ${isCa ? 'Gestió de fonts' : 'Gestión de fuentes'}
           </div>
           <h1 class="title" style="font-size: 26px; font-weight: 800; margin: 4px 0 8px; color: #1e1b4b;">
             📚 ${isCa ? 'Programes font' : 'Programas fuente'}
@@ -64,7 +65,7 @@ const SourceProgramsView = {
         <div class="empty-state-box" style="background: white; border: 1px solid var(--border-subtle); border-radius: 12px; padding: 48px 24px; text-align: center; margin-top: 10px;">
           <div style="font-size: 42px; margin-bottom: 12px;">📚</div>
           <h2 style="font-size: 18px; font-weight: 800; color: #1e1b4b; margin: 0 0 8px;">
-            ${isCa ? 'No hi ha cap Programa Marc instal·lat' : 'No hay ningún Programa Marco instalado'}
+            ${window.i18n.t('clean_start.no_official')}
           </h2>
           <p style="font-size: 14px; color: var(--text-secondary); max-width: 540px; margin: 0 auto 20px; line-height: 1.5;">
             ${isCa
@@ -87,11 +88,33 @@ const SourceProgramsView = {
       `}
     `;
 
+    if (contentStatus?.testContentEnabled === true) container.innerHTML += `
+      <div class="card" style="padding:16px;margin-top:20px;">
+        <label><input type="checkbox" id="chk-show-test-content"> ${window.i18n.t('clean_start.show_tests')}</label>
+        <div id="test-content-list" style="margin-top:12px;" aria-live="polite"></div>
+      </div>`;
+    container.querySelector('#chk-show-test-content')?.addEventListener('change', async event => {
+      const list = container.querySelector('#test-content-list');
+      list.innerHTML = '';
+      if (!event.target.checked) return;
+      const items = await window.api.getTestContentItems();
+      if (!event.target.checked) return;
+      list.innerHTML = items.length ? items.map((item,index) => {
+        const title = typeof item.title === 'object' ? (isCa ? item.title.ca : item.title.es) : item.title;
+        return `<div style="padding:12px;border:1px solid #f59e0b;margin-top:8px;">
+          <b>${window.i18n.t('clean_start.test_label')}</b> · ${escapeHtml(title)}
+          <button class="btn small" data-test-content-index="${index}" ${item.compatible_with_app === false ? 'disabled' : ''}>${window.i18n.t('clean_start.view_test')}</button>
+        </div>`;
+      }).join('') : window.i18n.t('clean_start.no_tests');
+      list.querySelectorAll('[data-test-content-index]').forEach(button => button.addEventListener('click', () => {
+        App.showContentUpdateDetailModal(items[Number(button.dataset.testContentIndex)], { allowTestFixture: true });
+      }));
+    });
     this.bindEvents(container);
   },
 
   renderSourceCard(source, isCa) {
-    const isDefault = source.id === 'fuente_marco_oficial';
+    const isDefault = source.official && source.oficial_actual_protegido;
     const esAvail = Boolean(source.idiomas?.es?.disponible);
     const caAvail = Boolean(source.idiomas?.ca?.disponible);
     const isProtected = Boolean(source.isProtected);
@@ -109,7 +132,7 @@ const SourceProgramsView = {
                 ${escapeHtml(source.nombre)}
               </h2>
               <div style="font-size: 12px; color: var(--text-muted);">
-                ${source.tipo === 'marco_oficial' ? (isCa ? 'Catàleg marc oficial' : 'Catálogo marco oficial') : (source.tipo?.toUpperCase() || 'DOCUMENTO')}
+                ${source.tipo === 'marco_oficial' ? (isOfficial ? (isCa ? 'Catàleg marc oficial' : 'Catálogo marco oficial') : window.i18n.t('clean_start.test_label')) : (source.tipo?.toUpperCase() || 'DOCUMENTO')}
                 ${source.origen_archivo ? ` · ${escapeHtml(source.origen_archivo)}` : ''}
               </div>
             </div>
@@ -183,21 +206,21 @@ const SourceProgramsView = {
               </button>
             ` : ''}
 
-            ${!caAvail && !source.archivado ? `
+            ${!isOfficial && !caAvail && !source.archivado ? `
               <button class="btn small btn-add-language" data-id="${source.id}" data-lang="ca" style="color: #7c3aed; border-color: #ddd6fe;">
                 🌐 ${isCa ? 'Afegir versió en català' : 'Añadir versión en catalán'}
               </button>
             ` : ''}
 
-            ${!esAvail && !source.archivado ? `
+            ${!isOfficial && !esAvail && !source.archivado ? `
               <button class="btn small btn-add-language" data-id="${source.id}" data-lang="es" style="color: #7c3aed; border-color: #ddd6fe;">
                 🌐 ${isCa ? 'Afegir versió en castellà' : 'Añadir versión en castellano'}
               </button>
             ` : ''}
 
-            <button class="btn small btn-rename-source" data-id="${source.id}" data-name="${escapeHtml(source.nombre)}">
+            ${!isOfficial?`<button class="btn small btn-rename-source" data-id="${source.id}" data-name="${escapeHtml(source.nombre)}">
               ✏️ ${isCa ? 'Reanomenar' : 'Renombrar'}
-            </button>
+            </button>`:''}
 
             ${!isProtected ? `
               ${source.archivado ? `
@@ -210,9 +233,9 @@ const SourceProgramsView = {
                 </button>
               `}
 
-              <button class="btn small btn-delete-source" data-id="${source.id}" data-name="${escapeHtml(source.nombre)}" data-linked="${source.proyectos_vinculados_count || 0}" style="color: #dc2626;">
+              ${!isOfficial?`<button class="btn small btn-delete-source" data-id="${source.id}" data-name="${escapeHtml(source.nombre)}" data-linked="${source.proyectos_vinculados_count || 0}" style="color: #dc2626;">
                 🗑️ ${isCa ? 'Eliminar' : 'Eliminar'}
-              </button>
+              </button>`:''}
             ` : `
               <span style="font-size: 12px; color: var(--text-muted); padding: 4px 8px;" title="${isCa ? 'Programa marc oficial actual protegit' : 'Programa marco oficial actual protegido'}">
                 🔒 ${isCa ? 'Protegida' : 'Protegida'}
@@ -255,11 +278,7 @@ const SourceProgramsView = {
     if (btnEmptyCheck) {
       btnEmptyCheck.addEventListener('click', () => {
         if (window.App) {
-          window.App.navigateTo('configuracion');
-          setTimeout(() => {
-            const btnCheck = document.querySelector('#btn-check-content-updates');
-            if (btnCheck) btnCheck.click();
-          }, 150);
+          window.App.openContentManager();
         }
       });
     }

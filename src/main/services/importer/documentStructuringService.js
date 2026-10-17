@@ -46,10 +46,10 @@ class DocumentStructuringService {
       let pdfRes;
       try {
         const inspection = await ocrEngine.inspectPdf(buffer);
-        const rawText = inspection.pages.map(p => p.text).join('\n\n');
+        const structured = pdfExtractor.structurePages(inspection.pages);
         pdfRes = { isScanned: inspection.summary.pending > 0 || inspection.summary.failed > 0,
           pageCount: inspection.pages.length, ocrPageCount: inspection.summary.pending,
-          areas: pdfExtractor.structurePdfText(rawText) };
+          areas:structured.areas,metadata:structured.metadata,stats:structured.stats,textLayerMixed:inspection.summary.mixed>0 };
       } catch {
         pdfRes = await pdfExtractor.extract(buffer);
       }
@@ -61,6 +61,7 @@ class DocumentStructuringService {
           pageCount: pdfRes.pageCount,
           ocrPageCount: pdfRes.ocrPageCount || pdfRes.pageCount,
           isScanned: true,
+          textLayerMixed:!!pdfRes.textLayerMixed,
           areas: [],
           metadata: {},
           stats: { totalAreas: 0, totalMeasures: 0, requiresReviewCount: 0 }

@@ -8,6 +8,8 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const {pathToFileURL} = require('url');
 const { execFileSync } = require('child_process');
 const docxExporter = require('./docxExporter');
 
@@ -84,6 +86,7 @@ class PdfExporter {
     // 1. Generar primero el documento DOCX maestro
     const docxResult = await docxExporter.exportProjectToDocx(project, { ...options, idioma, isCa });
     const docxPath = docxResult.filePath;
+    const exportWarnings=docxResult.warnings||[];
 
     if (!converters.canConvert) {
       return {
@@ -93,6 +96,7 @@ class PdfExporter {
         pdfPath: null,
         converters,
         error: 'converter_not_available',
+        warnings:exportWarnings,
         message: 'Para generar el PDF oficial con diseño idéntico al documento maestro se requiere Microsoft Word (o LibreOffice instalados en el equipo). Puedes abrir el archivo Word generado y guardarlo en PDF directamente.'
       };
     }
@@ -131,8 +135,11 @@ class PdfExporter {
         });
       } else if (converters.libreOfficePath) {
         // Conversión validada mediante LibreOffice Headless (argumentos separados, shell: false)
+        const conversionProfile=fs.mkdtempSync(path.join(os.tmpdir(),'cpm-office-'));
         execFileSync(converters.libreOfficePath, [
+          '-env:UserInstallation='+pathToFileURL(conversionProfile).href,
           '--headless',
+          '--norestore',
           '--convert-to',
           'pdf',
           '--outdir',
@@ -149,6 +156,7 @@ class PdfExporter {
       if (fs.existsSync(pdfPath) && fs.statSync(pdfPath).size > 1000) {
         return {
           success: true,
+          warnings:exportWarnings,
           docxPath,
           docxFilename,
           pdfPath,
@@ -162,6 +170,7 @@ class PdfExporter {
       console.error('Error al convertir DOCX a PDF:', err);
       return {
         success: false,
+        warnings:exportWarnings,
         docxPath,
         docxFilename,
         pdfPath: null,

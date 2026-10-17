@@ -33,15 +33,17 @@ Guía técnica para compilar **Constructor de Programas Municipales** a partir d
 
 ## 3. Preparación del AI Runtime Local (llama.cpp)
 
-Para la funcionalidad de asistencia local de redacción, la aplicación integra los binarios de ejecución CPU de `llama.cpp` en `resources/ai-runtime/llama.cpp`.
+Para la funcionalidad de asistencia local de redacción, la aplicación integra los binarios de ejecución CPU y Vulkan de `llama.cpp` en `vendor/llama/cpu`.
 
 El proyecto incluye un script automatizado para descargar y descomprimir la versión binaria verificada (b11476 CPU x64):
 
 ```bash
-node scripts/setup_llama_runtime.js
+node scripts/setup_verified_cpu.js
+node scripts/setup_verified_vulkan.js
+node scripts/setup_ocr_runtime.js
 ```
 
-Este comando descarga el paquete oficial de release de `llama.cpp` y ubica `llama-server.exe` junto a sus bibliotecas dinámicas (`.dll`) en la carpeta `resources/ai-runtime/llama.cpp/`.
+Este comando descarga el paquete oficial de release de `llama.cpp` y ubica `llama-server.exe` junto a sus bibliotecas dinámicas (`.dll`) en la carpeta `vendor/llama/cpu/`.
 
 ---
 
@@ -70,8 +72,9 @@ npm run build
 ```
 
 Este comando ejecuta internamente:
-1. `node scripts/setup_ocr_runtime.js` (prepara y verifica los recursos OCR locales).
-2. `electron-builder --win --x64 --publish never` (empaqueta el runtime de Electron, copia los recursos necesarios y genera el instalador NSIS).
+1. `node scripts/setup_verified_cpu.js` y `node scripts/setup_verified_vulkan.js` (verifican los dos runtimes oficiales b11476).
+2. `node scripts/setup_ocr_runtime.js` (prepara y verifica los recursos OCR locales).
+3. `electron-builder --win --x64 --publish never` (empaqueta el runtime de Electron, copia los recursos necesarios y genera el instalador NSIS).
 
 Desde la 3.5.3, compilar no regenera `src/renderer/js/i18n.js`: se empaqueta el archivo existente. Si se cambian expresamente los recursos de idioma, se debe ejecutar `node scripts/build_i18n.js` durante el desarrollo antes de verificar y empaquetar.
 
@@ -95,7 +98,7 @@ Después de compilar, ejecutar `node scripts/test_packaged_ocr.js` para comproba
 
 Las pruebas generan su propio catálogo sintético y usan perfiles y bases independientes en scratch. El código fuente publicable excluye los Programas Marco y las bases de datos reales. Los documentos escaneados de prueba se generan mediante scripts/generate_ocr_fixtures.js.
 
-Los instaladores y mapas de bloques se publican como assets de GitHub Releases. Subir conjuntamente el EXE con nombre versionado, su blockmap y latest.yml. No sustituir latest.yml por latest.txt o lastest.txt. Mantener las URLs y el repositorio de actualizaciones configurados en package.json.
+Los instaladores y mapas de bloques se publican como assets de GitHub Releases. Subir conjuntamente el EXE con nombre versionado, su blockmap y latest.yml. No sustituir latest.yml por latest.txt. Mantener las URLs y el repositorio de actualizaciones configurados en package.json.
 
 ## Importación conjunta de idiomas (3.5.2)
 
@@ -105,8 +108,21 @@ La ventana de importación acepta un archivo castellano y uno catalán opcionale
 
 ## Preparación local de una publicación
 
-Versión actual: 3.6.1. Ejecutar `npm run preparar-publicacion` después de preparar las dependencias y el runtime de llama.cpp. El comando lee package.json, impide sobrescribir una carpeta de versión existente, ejecuta npm test y npm run build, aplica .gitignore y genera código fuente, instalador y guía. No realiza commits, push ni publicaciones.
+Versión actual: 3.8.1. Ejecutar `npm run preparar-publicacion` después de preparar las dependencias y el runtime de llama.cpp. El comando lee package.json, impide sobrescribir una carpeta de versión existente, ejecuta npm test y npm run build, aplica .gitignore y genera código fuente, instalador y guía. No realiza commits, push ni publicaciones.
 
 El informe comprueba exclusiones, archivos grandes, posibles datos privados, identidad y hashes. Las coincidencias técnicas o de licencias se listan para revisión sin confundirse con credenciales. Si una comprobación falla, el informe empieza por NO PUBLICAR. Las pruebas manuales Windows deben completarse antes de subir.
 
 Usar únicamente los archivos de instalador de la carpeta de publicación recién generada: la compilación puede cambiar las huellas aunque el número de versión sea el mismo. No mezclar sus metadatos con copias de instalable anteriores.
+
+## IA local en 3.8.1
+La selección automática compara CPU y Vulkan con el mismo prompt de 64 tokens. Solo elige GPU si mejora al menos un 30 %. El resultado se guarda en configuración JSON por versión y hash del modelo. Ante fallo de GPU, reintenta una vez en CPU. Los modelos se descargan por elección del usuario y no forman parte del instalador; CUDA no se incluye.
+
+## Verificación de una copia limpia
+Ejecutar npm ci, los tres scripts de setup y npm test. Los perfiles de prueba son sintéticos. Si una ruta de clon muy larga provoca un fallo del conversor de Windows, asignar CPM_TEST_ROOT y TEMP a una carpeta temporal más corta antes de lanzar las pruebas; nunca utilizar las carpetas de datos de la aplicación instalada. Sin LibreOffice se indica la omisión del conversor y se sigue validando el XML de Word.
+
+## Entrega ordenada
+El comando `npm run preparar-publicacion` utiliza `entrega_distribucion.js`. Exige informe final que termine en LISTO PARA REVISIÓN, auditoría ASAR/payload y clon limpio aprobados. Opciones obligatorias: --workspace, --publications, --report, --annex y --content. Genera cuatro carpetas (código, release, contenidos opcionales e instalador), guía e informes. Conserva cualquier entrega anterior dentro de la carpeta de trabajo y nunca publica ni instala. Requiere --build false y reutiliza exclusivamente la compilación ya auditada; no recompila durante la entrega: comprueba todos sus hashes y la igualdad del código con el clon probado. Los informes y perfiles quedan fuera del código publicable.
+
+## Modelos de redacción local
+
+Qwen 2.5 1.5B (Apache-2.0) sigue recomendado por defecto por su menor consumo de memoria. Qwen3 4B Instruct 2507 (Apache-2.0, sin pensamiento) ofrece mayor calidad y está recomendado para 8 GB de RAM o GPU. Su GGUF Q4_K_M procede de Unsloth: no se encontró un GGUF oficial accesible públicamente; revisión y SHA-256 fijados en `data/ai_models.json`. Los modelos se descargan solo por petición del usuario y nunca se incluyen en el instalador.

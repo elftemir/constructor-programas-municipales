@@ -117,7 +117,7 @@ const ImportReviewView = {
       this.closeModal();
       if (batch.cancelled) return;
       if (analysis.isScanned) {
-        this.showOcrPromptModal(filePath, language, analysis.pageCount, analysis.ocrPageCount, null, batch);
+        this.showOcrPromptModal(filePath, language, analysis.pageCount, analysis.ocrPageCount, null, batch, analysis.textLayerMixed);
       } else {
         analysis.filePath = filePath; analysis.batchImport = batch;
         if (batch.name) analysis.sourceName = batch.name;
@@ -177,7 +177,7 @@ const ImportReviewView = {
 
       if (analysis.isScanned) {
         // PDF escaneado detectado: ofrecer OCR
-        this.showOcrPromptModal(filePath, language, analysis.pageCount, analysis.ocrPageCount);
+        this.showOcrPromptModal(filePath, language, analysis.pageCount, analysis.ocrPageCount, null, null, analysis.textLayerMixed);
       } else {
         // Documento con texto estructurado: mostrar resumen previo
         analysis.filePath = filePath;
@@ -190,7 +190,7 @@ const ImportReviewView = {
     }
   },
 
-  showOcrPromptModal(filePath, language, pageCount, ocrPageCount = pageCount, targetSourceId = null, batchImport = null) {
+  showOcrPromptModal(filePath, language, pageCount, ocrPageCount = pageCount, targetSourceId = null, batchImport = null, mixedTextLayer = false) {
     const isCa = window.i18n ? window.i18n.getLang() === 'ca' : false;
     const modalContainer = document.querySelector('#modal-container') || document.body;
 
@@ -204,7 +204,7 @@ const ImportReviewView = {
                 ${isCa ? 'Aquest document sembla necessitar reconeixement de text (OCR)' : 'Este documento parece necesitar reconocimiento de texto (OCR)'}
               </h2>
               <p style="font-size: 13.5px; color: var(--text-secondary); line-height: 1.5; margin: 0;">
-                ${isCa
+                ${mixedTextLayer ? window.i18n.t(language==='ca'?'ocr.mixedTextLayer':'ocr.mixedTextLayerOther') : isCa
                   ? `S'ha detectat que el fitxer PDF conté imatges o no disposa de text seleccionable (${pageCount} pàgines). Pots iniciar el procés de reconeixement de caràcters 100% local en castellà i català.`
                   : `Se ha detectado que el archivo PDF contiene imágenes o carece de texto seleccionable (${pageCount} páginas). Puedes iniciar el proceso de reconocimiento de caracteres 100% local en castellano y catalán.`}
               </p>
@@ -958,7 +958,7 @@ const ImportReviewView = {
       this.closeModal();
 
       if (analysis.isScanned) {
-        this.showOcrPromptModal(filePath, targetLang, analysis.pageCount, analysis.ocrPageCount, sourceId);
+        this.showOcrPromptModal(filePath, targetLang, analysis.pageCount, analysis.ocrPageCount, sourceId, null, analysis.textLayerMixed);
         return;
       }
       analysis.filePath = filePath;

@@ -3,6 +3,9 @@ const fs = require('fs'); const path = require('path'); const crypto = require('
 const { spawn, spawnSync } = require('child_process');
 const ignore = require('ignore'); const yaml = require('js-yaml');
 const { guide, PUBLICATIONS, SOURCE_REPO, UPDATES_REPO } = require('./publicacion_guia');
+const { auditPackage, auditSection } = require('./auditar_distribucion_limpia');
+const { cleanInstallGuide } = require('./prueba_instalacion_limpia');
+const { POLICY_FILE, findHostPaths, validateCompilerWhitelist, classifyPath, loadCompilerWhitelist } = require('./auditar_rutas');
 const hash = (bytes, algorithm = 'sha256') => crypto.createHash(algorithm).update(bytes).digest(algorithm === 'sha512' ? 'base64' : 'hex');
 const slash = value => value.replace(/\\/g, '/');
 
@@ -11,9 +14,11 @@ function forbiddenReason(rel) {
   if (parts.some(p => ['.git', 'node_modules', 'dist', 'out', 'release', 'instalable', 'scratch', 'content-fixtures', 'public-source-candidate', 'backups', 'backup', 'copias', 'logs', '.cache', '__pycache__', PUBLICATIONS.toLowerCase()].includes(p))) return 'carpeta local o de compilacion';
   if (/^0\d_/.test(parts[0]) || parts[0] === 'cartepa instalada respeldo') return 'material interno';
   if (parts.some(p => p.startsWith('.env'))) return 'variables de entorno';
-  if (/\.(exe|blockmap|gguf|ggml|sqlite3?|db|pdf|pfx|p12|pem|key|cer|dll|so|dylib|log|bak|tmp)$/i.test(rel)) return 'extension no publicable';
-  if (parts.at(-1) === 'latest.yml' || parts.at(-1) === 'catalogo_marco.json') return 'metadatos de actualizacion o catalogo privado';
+  if (/\.(exe|blockmap|zip|gguf|ggml|sqlite3?|db|pdf|pfx|p12|pem|key|cer|dll|so|dylib|log|bak|tmp)$/i.test(rel)) return 'extension no publicable';
+  if (parts.at(-1) === 'latest.yml' || (/^catalogo_.*\.json$/i.test(parts.at(-1)) && !/^catalogo_(modelos|municipios).*\.json$/i.test(parts.at(-1)))) return 'metadatos de actualizacion o catalogo privado';
+  if (['extracted_raw.txt','catalogo_validacion.html'].includes(parts.at(-1))) return 'extraccion privada';
   if (parts.slice(0, 3).join('/') === 'resources/ai-runtime/llama.cpp') return 'runtime llama.cpp';
+  if (parts[0]==='vendor' || parts.slice(0,2).join('/')==='resources/ocr-runtime') return 'runtime descargable';
   return null;
 }
 
@@ -62,6 +67,7 @@ function listPublicFiles(root) {
 
 function auditSource(root, files) {
   const entries = []; const findings = []; const errors = [];
+  const compilerPolicy = loadCompilerWhitelist();
   const textExt = /\.(js|cjs|mjs|json|md|txt|csv|ya?ml|nsh|nsi|html|css|svg|xml|py|ps1|bat|sh|sql|toml|cfg)$/i;
   for (const rel of files) {
     const bytes = fs.readFileSync(path.join(root, rel));
@@ -78,10 +84,19 @@ function auditSource(root, files) {
         text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
       }
     } catch (_) { if (knownText) errors.push(rel + ': formato de texto no legible'); continue; }
+    let exactCompilerPaths = null;
+    if (slash(rel) === POLICY_FILE) {
+      try { exactCompilerPaths = new Set(validateCompilerWhitelist(JSON.parse(text)).entries.map(entry=>entry.path)); }
+      catch (error) { errors.push(rel+': politica de rutas invalida: '+error.message); }
+    }
     for (const [index, line] of text.split(/\r?\n/).entries()) {
-      const normalized = line.replace(/\\\\/g, '\\').replace(/\//g, '\\');
-      const personal = /[A-Z]:\\(?:Users\\[^\\\s"'`]+|Mis Documentos\\[^"'`\r\n]+)/i.test(normalized);
-      if (personal) { findings.push({ file: rel, line: index + 1, kind: 'RUTA PERSONAL', blocking: true }); errors.push(rel + ':' + (index + 1) + ': ruta personal'); }
+      const normalized = line.replace(/\\\\/g, '\\');
+      for (const candidate of findHostPaths(normalized)) {
+        const exactPolicyReference = exactCompilerPaths?.has(candidate.path);
+        const verdict = classifyPath(candidate.path,rel,hash(bytes),compilerPolicy);
+        if (exactPolicyReference || verdict.exception) findings.push({file:rel,line:index+1,kind:'RUTA DE COMPILACION DE TERCERO — CADENA EXACTA REVISADA',blocking:false,value:candidate.path});
+        else if (verdict.blocking) { findings.push({file:rel,line:index+1,kind:'RUTA PERSONAL',blocking:true});errors.push(rel+':'+(index+1)+': ruta personal'); }
+      }
       const emails = line.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
       for (const email of new Set(emails.filter(e => e.toLowerCase() !== 'elftemir@hotmail.com'))) {
         const license = /license|notice|licenc|third.party|copying/i.test(rel);
@@ -160,6 +175,8 @@ DOCX funciona sin conversor. PDF requiere Word o LibreOffice. La IA y el OCR tra
 
 ## Descarga y comprobacion
 
+El instalador lo distribuye directamente el autor. Para solicitarlo: elftemir@hotmail.com. Este repositorio contiene el código fuente; consulta SOURCE_BUILD.md para compilarlo. La Release del código no adjunta ningún EXE. El actualizador automático utiliza el repositorio de actualizaciones.
+
 Instalador: ${installer.exe}
 Tamano: ${installer.size.toLocaleString('es-ES')} bytes (${(installer.size / 1048576).toFixed(2)} MiB).
 SHA-256: ${installer.sha256}
@@ -187,7 +204,7 @@ async function prepare(root = path.resolve(__dirname, '..'), options = {}) {
   if (tests.code !== 0) throw Error('npm test ha fallado. No se crea la carpeta de publicacion.');
   const listing = listPublicFiles(root);
   const source = auditSource(root, listing.files);
-  const cover = 'src/main/assets/templates/portada_programa_sant_andreu_editable.docx';
+  const cover = 'src/main/assets/templates/portada_programa_editable.docx';
   const coverBefore = fs.existsSync(path.join(root, cover)) ? hash(fs.readFileSync(path.join(root, cover))) : null;
   const buildStarted = Date.now();
   const build = await run(['run', 'build']);
@@ -202,7 +219,7 @@ async function prepare(root = path.resolve(__dirname, '..'), options = {}) {
   if (!listing.files.includes(cover) || !coverBefore || !fs.existsSync(path.join(root, cover)) || coverBefore !== hash(fs.readFileSync(path.join(root, cover)))) errors.push('La portada falta o ha cambiado');
   for (const file of ['README.md', 'SOURCE_BUILD.md', 'CHANGELOG.md', 'CONTRIBUTING.md', 'docs/REQUISITOS_INSTALADOR.md', '.github/ISSUE_TEMPLATE/error_programa.md', '.github/ISSUE_TEMPLATE/importacion_marco.md', '.github/ISSUE_TEMPLATE/propuesta_mejora.md', 'package-lock.json', 'scripts/preparar_publicacion.js']) if (!listing.files.includes(file)) errors.push('Falta documento/archivo requerido: ' + file);
   const changelog = fs.existsSync(path.join(root, 'CHANGELOG.md')) ? fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8') : '';
-  const currentChanges = changelog.match(new RegExp('^## ' + pkg.version.replace(/\./g, '\\.') + '\\s*\\n([\\s\\S]*?)(?=\\n## |$)', 'm'))?.[1]?.trim();
+  const currentChanges = changelog.match(new RegExp('(?:^|\\n)## ' + pkg.version.replace(/\./g, '\\.') + '\\s*\\n([\\s\\S]*?)(?=\\n## |$)'))?.[1]?.trim();
   if (!currentChanges) errors.push('CHANGELOG.md debe documentar la version ' + pkg.version);
   // Match every published application file with the actual ASAR from this build.
   if (!options.skipPackagedCheck) {
@@ -217,16 +234,24 @@ async function prepare(root = path.resolve(__dirname, '..'), options = {}) {
       }
     } catch (err) { errors.push('No se pudo verificar el codigo empaquetado: ' + err.message); }
   }
+  let cleanAudit = null;
+  if (!options.skipPackagedCheck) {
+    try { cleanAudit = await auditPackage(root); errors.push(...cleanAudit.errors); }
+    catch (error) { errors.push('Auditoria de distribucion limpia: ' + error.message); }
+  }
   const testSummary = tests.output.slice(tests.output.lastIndexOf('RESUMEN FINAL') >= 0 ? tests.output.lastIndexOf('RESUMEN FINAL') : Math.max(0, tests.output.length - 5000)).trim();
   const date = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid', hour12: false });
   const report = [errors.length ? 'NO PUBLICAR\n' + errors.map(e => '- ' + e).join('\n') : 'PREPARACION CORRECTA — comprobaciones automaticas aprobadas; completar pruebas manuales antes de subir.',
     `Version: ${pkg.version}\nFecha Europe/Madrid: ${date}\nOrigen: ${root}\nDestino: ${destination}\nNo se ha subido nada a GitHub.`,
     'PRUEBAS\n' + testSummary + '\nCompilacion: npm run build, codigo de salida ' + build.code,
+    cleanAudit ? auditSection(cleanAudit) : (options.skipPackagedCheck ? 'DISTRIBUCIÓN VACÍA / DISTRIBUCIÓN LIMPIA\nOMITIDA SOLO EN EL FIXTURE DEL PREPARADOR (instalador sintético; nunca en la ejecución normal).' : 'DISTRIBUCIÓN VACÍA\nNO PUBLICAR: auditoría no completada.'),
     `CODIGO FUENTE\nSeleccion: ${listing.mode}\nArchivos: ${source.entries.length}\nTotal: ${source.totalBytes} bytes\nArchivos de mas de 50 MB: ${source.entries.filter(e => e.bytes > 50 * 1000 * 1000).length}.`,
-    'EXCLUSIONES\nNo se incluyen node_modules, dist, EXE, blockmap, latest.yml, modelos, SQLite, binarios llama.cpp, PDF, .env, certificados, backups, logs, carpetas internas 00–09, content-fixtures, scratch, public-source-candidate ni la carpeta de publicaciones.\nCatalogo politico privado excluido de la fuente. Portada original conservada.\n' + listing.excluded.map(e => '- ' + e.file + ' [' + e.reason + ']').join('\n'),
+    'EXCLUSIONES\nNo se incluyen node_modules, dist, EXE, blockmap, latest.yml, modelos, SQLite, binarios llama.cpp, PDF, .env, certificados, backups, logs, carpetas internas 00–09, content-fixtures, scratch, public-source-candidate ni la carpeta de publicaciones.\nCatalogo politico privado excluido de la fuente. Portada neutra conservada.\n' + listing.excluded.map(e => '- ' + e.file + ' [' + e.reason + ']').join('\n'),
     'ANALISIS DE TEXTO\nSe buscan rutas personales, correos distintos del contacto, password, token, apikey y secret. Las lineas con palabras tecnicas o atribuciones de licencias se listan para revision; no se consideran credenciales por esa palabra sola. Las coincidencias bloqueantes impiden publicar. No se imprime el valor de una posible credencial.\n' + (source.findings.length ? source.findings.map(f => `${f.file}:${f.line} — ${f.kind}${f.value ? ' — ' + f.value : ''}${f.blocking ? ' — BLOQUEANTE' : ''}`).join('\n') : 'Sin coincidencias.'),
     `INSTALADOR\nArchivo: ${installer.exe}\nVersion: ${pkg.version}\nTamano: ${installer.size} bytes\nSHA-256: ${installer.sha256}\nSHA-512: ${installer.sha512}\nNombre, version, tamano y SHA512 de latest.yml: ${installer.errors.length ? 'FALLO; ver motivos iniciales' : 'CORRECTOS'}\nappId: ${pkg.build?.appId}\nproductName: ${pkg.build?.productName}\nauthor.name: ${pkg.author?.name}\nnsis.perMachine: ${pkg.build?.nsis?.perMachine}\nCarpeta fija y acceso del escritorio: verificados.`,
     'ARCHIVOS INCLUIDOS (ruta; bytes; SHA256)\n' + source.entries.map(e => `${e.file}; ${e.bytes}; ${e.sha256}`).join('\n'),
+    ...(cleanAudit ? ['LISTADO COMPLETO ASAR — npx --no-install asar list\n' + cleanAudit.fullList,
+      'LISTADO COMPLETO resources/ Y extraResources (ruta; bytes; SHA256)\n' + cleanAudit.resourceInventory] : []),
     'PENDIENTE DEL USUARIO\nRevisar coincidencias y completar pruebas manuales Windows de instalacion, reinstalacion, desinstalacion con Si/No, entrada huerfana y acceso de escritorio. La subida se hace siguiendo GUIA_SUBIDA_GITHUB.txt. No se ha comprobado ni modificado la instalacion real.'
   ].join('\n\n') + '\n';
   if (errors.length) {
@@ -253,6 +278,7 @@ async function prepare(root = path.resolve(__dirname, '..'), options = {}) {
     fs.writeFileSync(path.join(destination, 'GUIA_SUBIDA_GITHUB.txt'), guide(root, pkg.version, installer.exe), { flag: 'wx' });
     fs.writeFileSync(path.join(destination, 'INFORME_PUBLICACION.txt'), report, { flag: 'wx' });
     fs.writeFileSync(path.join(destination, 'NOTAS_VERSION.md'), versionNotes(pkg, installer, currentChanges), { flag: 'wx' });
+    fs.writeFileSync(path.join(destination, 'PRUEBA_INSTALACION_LIMPIA.txt'), cleanInstallGuide(pkg.version, installer.exe), { flag: 'wx' });
   } catch (err) {
     const target = path.join(destination, 'INFORME_PUBLICACION.txt');
     fs.writeFileSync(target, 'NO PUBLICAR\nFallo al copiar/preparar: ' + err.message + '\n\n' + report);

@@ -25,7 +25,7 @@ A) ANTES DE EMPEZAR
    - Desinstalar respondiendo Sí: retirar también datos y accesos del usuario.
    - Entrada huérfana: en una instalación de prueba, retirar su desinstalador y reinstalar; debe reparar sin duplicar entradas.
 4. El CONTENIDO de codigo-fuente va a la raíz del repositorio del código. No subas la carpeta V${version} completa ni los informes a ese repositorio.
-5. El instalador NO se mete en el código: se adjunta a las Releases. Usa solo el EXE, blockmap y latest.yml de instalador de ESTA carpeta, sin mezclarlos con otra compilación.
+5. El instalador lo distribuye directamente el autor. Para solicitarlo: elftemir@hotmail.com. El repositorio del código contiene las fuentes y sus etiquetas, sin EXE adjuntos. Consulta SOURCE_BUILD.md para compilarlo. El actualizador automático utiliza el repositorio de actualizaciones, con EXE, blockmap y latest.yml disponibles en ese repositorio. Esta preparación no sube ningún archivo.
 
 B) PASO 1: SUBIR EL CÓDIGO CON GITHUB DESKTOP (RECOMENDADO)
 
@@ -78,49 +78,58 @@ Revisa la lista de git status antes de estos dos comandos:
 git commit -m "Versión ${version}"
 git push origin main
 
-C) PASO 2: RELEASE EN EL REPOSITORIO DEL CÓDIGO
+C) PASO 2: ETIQUETA OBLIGATORIA EN EL REPOSITORIO DEL CÓDIGO
+
+Cada versión debe tener su etiqueta v${version}. Este paso NO es opcional. Elige una de estas vías; no crees dos etiquetas ni reemplaces una existente.
+
+GITHUB DESKTOP (RECOMENDADO):
+1. Abre la pestaña History del repositorio del código.
+2. Haz clic derecho en el commit Versión ${version} y elige Create Tag….
+3. Escribe v${version} y pulsa Create Tag.
+4. Pulsa Push origin para subir la etiqueta. Comprueba que v${version} aparece en GitHub sobre ese commit; la flecha de etiqueta pendiente desaparece en Desktop.
+
+ALTERNATIVA POWERSHELL, desde el clon y después de subir main:
+git tag -a "v${version}" -m "Versión ${version}"
+git push origin "v${version}"
+
+ALTERNATIVA WEB: PUBLICAR UNA RELEASE DEL CÓDIGO SIN INSTALADOR
 
 1. Abre ${SOURCE_REPO}/releases.
 2. Pulsa Draft a new release (o Create a new release si aún no hay ninguna).
-3. En Choose a tag escribe v${version} y elige crear esa etiqueta sobre main. Si la etiqueta ya existe, para y revisa qué se publicó; no la reemplaces.
+3. En Choose a tag escribe v${version}, selecciona main y pulsa Create new tag on publish. Si ya creaste la etiqueta con Desktop, selecciónala y comprueba su commit; no la reemplaces.
 4. Título: Constructor de Programas Municipales ${version}.
 5. Abre NOTAS_VERSION.md, copia su contenido y pégalo en las notas.
-6. Arrastra desde instalador estos DOS archivos:
-   ${exe}
-   SHA256.txt
+6. NO adjuntes ningún EXE. El instalador se distribuye directamente por el autor; esta Release identifica el código fuente.
 7. Marca Set as the latest release. No marques pre-release.
-8. Pulsa Publish release. La carpeta de código y los informes no se adjuntan como instalador.
+8. Pulsa Publish release.
 
-D) PASO 3: RELEASE EN EL REPOSITORIO DE ACTUALIZACIONES
+D) PASO 3: CONSERVAR EL INSTALADOR PARA DISTRIBUCIÓN DIRECTA
 
-1. Abre ${UPDATES_REPO}/releases.
-2. Pulsa Draft a new release. Crea la etiqueta v${version} en ese repositorio; es independiente de la etiqueta del código.
-3. Mismo título: Constructor de Programas Municipales ${version}. Pega las mismas NOTAS_VERSION.md.
-4. Adjunta LOS TRES archivos, todos de instalador de ESTA carpeta:
-   ${exe}
-   ${exe}.blockmap
-   latest.yml
-5. NO marques pre-release. Marca Set as the latest release si aparece.
-6. Pulsa Publish release. No lo dejes en borrador: el actualizador necesita una Release publicada con sus tres archivos.
+1. La carpeta instalador contiene el EXE, su blockmap, latest.yml y SHA256.txt de ESTA compilación.
+2. NO subas esta carpeta ni esos archivos a GitHub. Distribúyelos directamente por el autor.
+3. El código mantiene el repositorio de actualizaciones configurado: ${UPDATES_REPO}.
+   Preparar estos archivos no crea una actualización remota. La aplicación solo puede ofrecer las versiones disponibles allí.
+4. El repositorio de contenidos es independiente; no se ha cambiado ni publicado nada en él.
 
 E) COMPROBAR QUE HA SALIDO BIEN
 
-1. Código: main muestra el último commit Versión ${version}; la Release v${version} tiene el EXE y SHA256.txt. Dentro del árbol del código no aparecen node_modules, dist ni EXE.
-2. Actualizaciones: Release v${version} publicada, no borrador ni pre-release, con EXE, blockmap y latest.yml.
-3. Descarga el EXE publicado y comprueba su huella con Get-FileHash; debe coincidir con SHA256.txt y NOTAS_VERSION.md.
-4. Opcional: en un equipo de prueba con una versión anterior, abrir Configuración → Comprobar actualizaciones y comprobar que ofrece ${version}.
+1. Código: main muestra el último commit Versión ${version}; la etiqueta OBLIGATORIA v${version} corresponde a ese commit.
+   Si usaste la vía web, también aparece su Release sin EXE adjuntos. Dentro del árbol no aparecen node_modules, dist ni instaladores.
+2. Comprueba Get-FileHash del EXE que distribuyes: debe coincidir con SHA256.txt y NOTAS_VERSION.md.
+3. Completa PRUEBA_INSTALACION_LIMPIA.txt en un entorno aislado antes de distribuir.
 
 F) SI ALGO FALLA
 
 - Pide usuario o contraseña: usa el inicio de sesión de GitHub Desktop o el gestor de credenciales de Git. GitHub no admite la contraseña normal de la cuenta para Git por HTTPS. No pegues credenciales en incidencias ni en archivos del proyecto.
 - rejected o non-fast-forward: puede haber cambios nuevos en GitHub. Fetch/Pull en Desktop o git pull --ff-only. Si hay conflictos o el pull falla, para y pide ayuda; no borres cambios para ocultar el problema.
-- Archivo demasiado grande: no debe ir un EXE, modelo o compilación dentro del código. Usa las Releases para el instalador. Si ya se añadió a un commit local, no sigas intentando subirlo sin corregir ese commit.
+- Archivo demasiado grande: no debe ir un EXE, modelo o compilación dentro del código. El EXE se distribuye directamente por el autor y los archivos del actualizador permanecen fuera del repositorio fuente. Si ya se añadió a un commit local, no sigas intentando subirlo sin corregir ese commit.
 - Error al clonar: revisa cuenta, URL y que la carpeta del clon no contenga otro repositorio.
 - Si publicaste un instalador defectuoso, no borres la Release para sustituirlo silenciosamente. Corrige el proyecto y publica una versión nueva con número mayor.
 - NUNCA uses git push --force. Si no entiendes un error, para y pide ayuda.
 
 REFERENCIAS
 https://docs.github.com/en/desktop/adding-and-cloning-repositories/cloning-and-forking-repositories-from-github-desktop
+https://docs.github.com/en/desktop/managing-commits/managing-tags-in-github-desktop
 https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository
 https://docs.github.com/en/get-started/git-basics/about-remote-repositories
 `;

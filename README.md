@@ -4,7 +4,7 @@ Aplicación de escritorio para la elaboración, adaptación y gestión de progra
 
 ## Estado del proyecto
 
-Versión actual del código: **3.6.1**.
+Versión actual del código: **3.8.1**. Ni la 3.7.0 ni la 3.8.0 se publicaron; sus cambios se incorporan aquí.
 
 Disponible para **Windows 10/11 x64**.
 
@@ -15,16 +15,18 @@ Disponible para **Windows 10/11 x64**.
 - Programas Marco en uno o varios idiomas oficiales.
 - Adaptación de medidas a programas municipales.
 - Gestión de contenidos en Castellano y Català.
-- Asistencia mediante inteligencia artificial local.
+- Asistencia mediante inteligencia artificial local en CPU o GPU Vulkan, con detección, comparación de velocidad y retorno automático al procesador.
+- Avisos del motor real de cada texto; las etiquetas no se guardan ni exportan.
 - Generación de documentos DOCX y PDF.
 - Actualización independiente de la aplicación y de los Programas Marco.
 - Funcionamiento local: los proyectos y los textos procesados por la IA permanecen en el ordenador del usuario.
+- Instalación limpia: empieza sin Programas Marco, proyectos, lemas ni logos personales. Inicio permite buscar contenidos o importar documentos PDF/DOCX; los datos de instalaciones anteriores se conservan.
 
 ## Descargar
 
-El instalador se adjunta en [Releases del repositorio del código](https://github.com/elftemir/constructor-programas-municipales/releases). Descarga el EXE de la versión publicada y, si quieres comprobarlo, su SHA256.txt. No necesitas descargar ni compilar el código para usar el programa.
+El instalador lo distribuye directamente el autor. Para solicitarlo: elftemir@hotmail.com. Este repositorio contiene el código fuente; consulta [SOURCE_BUILD.md](SOURCE_BUILD.md) para compilarlo.
 
-El actualizador automático utiliza las Releases del [repositorio de actualizaciones](https://github.com/elftemir/constructor-programas-municipales-updates/releases). Ambos destinos deben recibir archivos de la misma compilación.
+El actualizador automático utiliza las Releases del [repositorio de actualizaciones](https://github.com/elftemir/constructor-programas-municipales-updates/releases).
 
 ## Requisitos
 
@@ -77,3 +79,7 @@ Consulta el archivo [LICENSE](LICENSE) para ver el texto completo de la GNU Gene
 ## Desarrollo y colaboración
 
 Consulta [CONTRIBUTING.md](CONTRIBUTING.md), [SOURCE_BUILD.md](SOURCE_BUILD.md) y [CHANGELOG.md](CHANGELOG.md). Para preparar una carpeta local de publicación: `npm run preparar-publicacion`. Este comando no sube nada a GitHub.
+
+## Modelos de redacción local
+
+Qwen 2.5 1.5B (Apache-2.0) sigue recomendado por defecto por su menor consumo de memoria. Qwen3 4B Instruct 2507 (Apache-2.0, sin pensamiento) ofrece mayor calidad y está recomendado para 8 GB de RAM o GPU. Su GGUF Q4_K_M procede de Unsloth: no se encontró un GGUF oficial accesible públicamente; revisión y SHA-256 fijados en `data/ai_models.json`. Los modelos se descargan solo por petición del usuario y nunca se incluyen en el instalador.

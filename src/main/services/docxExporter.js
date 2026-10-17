@@ -1,3 +1,4 @@
+const { getLema } = require('../utils/lema');
 const fs = require('fs');
 const path = require('path');
 const JSZip = require('jszip');
@@ -51,15 +52,15 @@ const MONTHS = {
   ca: ['gener', 'febrer', 'març', 'abril', 'maig', 'juny', 'juliol', 'agost', 'setembre', 'octubre', 'novembre', 'desembre']
 };
 
-// Textos base de la plantilla de portada (portada_programa_sant_andreu_editable.docx).
+// Marcadores neutros de la plantilla de portada.
 const COVER_TEXTS = {
-  programa: ['Programa Municipal', 'Programa de Podemos'],
-  partido: ['Candidatura', 'Podemos'],
-  municipio: ['Municipio', 'Sant Andreu de la Barca'],
-  elecciones: 'Elecciones municipales · 28 de mayo de 2027',
+  programa: 'Programa Municipal',
+  partido: 'Candidatura',
+  municipio: 'Municipio',
+  elecciones: 'Elecciones municipales',
   lemaEtiqueta: 'LEMA DE CAMPAÑA',
-  lema1: 'POLÍTICAS',
-  lema2: 'HONESTAS'
+  lema1: 'Lema de',
+  lema2: 'campaña'
 };
 
 // Medidas sin título: párrafo numerado (1.1, 1.2…) con el texto en peso normal.
@@ -290,14 +291,20 @@ function fitTextboxToWidth(xml, text) {
   const trackingPt = Number((box.match(/<w:spacing w:val="(-?\d+)"\/>/) || [])[1] || 0) / 20;
   const shown = caps ? text.toUpperCase() : text;
   const n = [...shown].length;
-  const glyphs = glyphWidthPt(shown, font, bold, sizePt);
-  const available = (cx / 12700) * 0.96;               // EMU -> pt, con un pequeño margen
+  // Some converters substitute embedded fonts; leave room for the Inter fallback.
+  const glyphs = Math.max(glyphWidthPt(shown, font, bold, sizePt), glyphWidthPt(shown, 'Inter', bold, sizePt));
+  const available = (cx / 12700) * 0.75;               // EMU -> pt; margen para conversores y fuentes sustituidas
   if (glyphs + trackingPt * n <= available) return xml;
 
   const factor = Math.max(0.3, (available - trackingPt * n) / glyphs);
-  const scaled = box.replace(/<w:(sz|szCs) w:val="(\d+)"\/>/g,
+  // DrawingML and its VML fallback must use the same size (Word / LibreOffice).
+  const alternateStart = xml.lastIndexOf('<mc:AlternateContent', anchorStart);
+  const alternateEnd = xml.indexOf('</mc:AlternateContent>', boxEnd);
+  const start = alternateStart >= 0 ? alternateStart : boxStart;
+  const end = alternateStart >= 0 && alternateEnd >= 0 ? alternateEnd + '</mc:AlternateContent>'.length : boxEnd;
+  const scaled = xml.slice(start, end).replace(/<w:(sz|szCs) w:val="(\d+)"\/>/g,
     (w, tag, v) => `<w:${tag} w:val="${Math.max(12, Math.floor(Number(v) * factor))}"/>`);
-  return xml.slice(0, boxStart) + scaled + xml.slice(boxEnd);
+  return xml.slice(0, start) + scaled + xml.slice(end);
 }
 
 function customizeCover(coverBody, values, warnings) {
@@ -332,15 +339,11 @@ function customizeCover(coverBody, values, warnings) {
     set('lemaEtiqueta', values.lemaEtiqueta, { required: false });
     set('lema1', values.lema1);
     set('lema2', values.lema2);
-    xml = xml.replace(/name="Texto POL[Í\u00cd]TICAS"/g, 'name="Texto Lema 1"');
-    xml = xml.replace(/name="Texto HONESTAS"/g, 'name="Texto Lema 2"');
   } else {
     // Sin lema: se vacían los cuadros de texto del lema (no se toca la estructura XML)
     set('lemaEtiqueta', '', { required: false });
     set('lema1', '', { required: false });
     set('lema2', '', { required: false });
-    xml = xml.replace(/name="Texto POL[Í\u00cd]TICAS"/g, 'name="Cuadro Lema 1"');
-    xml = xml.replace(/name="Texto HONESTAS"/g, 'name="Cuadro Lema 2"');
   }
   return xml;
 }
@@ -492,14 +495,25 @@ async function exportProjectToDocx(project, options = {}) {
   }
 
   const warnings = [];
+  const repaired=require('../../shared/textFormat').repairDocument(project.textos_generales||{});
+  if(repaired.changed){
+    project={...project,textos_generales:repaired.texts};
+    warnings.push((options.idioma||project.idioma_principal)==='ca'?'S’ha convertit un text amb format intern incorrecte només al document exportat; les dades guardades no s’han modificat.':'Se ha convertido un texto con formato interno incorrecto solo en el documento exportado; los datos guardados no se han modificado.');
+  }
   const primaryLang = project.idioma_principal || 'es';
   const targetLang = options.idioma || primaryLang;
+  const stored=project.textos_generales||{},targetTexts={presentacion:stored.presentacion?.[targetLang]||{titulo:stored.presentacion_titulo,entradilla:stored.presentacion_entradilla,parrafos:stored.presentacion_parrafos},cierre:stored.cierre?.[targetLang]||{titulo:stored.cierre_titulo,parrafos:stored.cierre_parrafos},introducciones:Object.values(stored.introducciones_areas||{}).map(node=>node?.[targetLang]||node)};
+  if(require('../../shared/textFormat').unresolved(targetTexts))throw Object.assign(new Error(targetLang==='ca'?'Hi ha un text amb format incorrecte que no es pot convertir. Revisa’l abans d’exportar.':'Hay un texto con formato incorrecto que no se puede convertir. Revísalo antes de exportar.'),{code:'UNRESOLVED_TEXT_FORMAT'});
+  // Esta excepción solo se aplica a la exportación que el usuario ha confirmado.
+  if (options.lemaAlternativoConfirmado === true && !getLema(project, targetLang)) {
+    project = { ...project, ['lema_' + targetLang]: getLema(project, targetLang === 'ca' ? 'es' : 'ca') };
+  }
   const txt = FIXED_TEXTS[targetLang] || FIXED_TEXTS.es;
   const translating = targetLang !== primaryLang;
 
   // Plantillas
   const templatePath = resolveAssetPath('templates', 'modelo_programa_final.docx');
-  const portadaPath = resolveAssetPath('templates', 'portada_programa_sant_andreu_editable.docx');
+  const portadaPath = resolveAssetPath('templates', 'portada_programa_editable.docx');
   if (!fs.existsSync(templatePath)) {
     throw new Error('No se encontró la plantilla Word en la ruta: ' + templatePath);
   }
@@ -511,8 +525,8 @@ async function exportProjectToDocx(project, options = {}) {
   const mandato = oneLine(project.mandato) || '2027–2031';
   const referenciaElectoral = project.fecha_electoral
     ? `${txt.elecciones} · ${formatElectionDate(project.fecha_electoral, targetLang)}`
-    : `${txt.elecciones} ${getFirstYear(mandato)}`;
-  const [lema1, lema2] = splitLema(project.lema);
+    : '';
+  const [lema1, lema2] = splitLema(getLema(project, targetLang));
 
   let coverXml = '';
   if (fs.existsSync(portadaPath)) {
@@ -652,7 +666,7 @@ async function exportProjectToDocx(project, options = {}) {
     }
   }
 
-  // 2. Textos generales (Fase 1: Si está vacío, está vacío. Prohibición de contenido inventado)
+  // 2. Textos generales (Regla: Si está vacío, está vacío. Prohibición de contenido inventado)
   const generalTexts = project.textos_generales || {};
   let customPresTitulo = oneLine(generalTexts.presentacion_titulo) || '';
   let presentacionEntradilla = toParagraphs(generalTexts.presentacion_entradilla || '');

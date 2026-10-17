@@ -72,8 +72,9 @@ class OcrEngine {
   async processScannedPdf(buffer, options = {}) {
     const result = await this.run(buffer, options);
     const text = result.pages.map(p => p.text).join('\n\n');
-    const structured = pdfExtractor.structurePdfText(text, { allowFallbackArea: false });
-    const areas = Array.from(structured);
+    let structured = pdfExtractor.structurePages(result.pages);
+    if(!structured.areas.length){const fallback=pdfExtractor.structurePdfText(text, { allowFallbackArea: false });structured={areas:Array.from(fallback),metadata:fallback.metadata};}
+    const areas = structured.areas;
     const normalize = value => value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
     for (const area of areas) for (const measure of area.measures || []) {
       const target = normalize([measure.title, measure.text].filter(Boolean).join(' '));
@@ -91,7 +92,7 @@ class OcrEngine {
     const covered = normalize(areas.map(a => [a.title, a.introduction, ...(a.subareas || []).map(s => s.title || s),
       ...(a.measures || []).map(m => [m.sourceNumber, m.title, m.text].join(' '))].join(' ')).join(' ') +
       [structured.metadata?.cover, structured.metadata?.presentation, structured.metadata?.backMatter].join(' '));
-    const unclassified = result.pages.flatMap(p => p.lines.filter(l => !areas.length ||
+    const unclassified = result.pages.flatMap(p => (structured.lines?structured.lines.filter(l=>l.page===p.page):p.lines).filter(l => !areas.length ||
       (normalize(l.text).length > 3 && !covered.includes(normalize(l.text)) &&
         !areas.some(a => normalize(l.text.replace(/^(?:área|àrea|area|eje|bloc|bloque)\s*\d+[.\s:\-]*/iu, '')).trim() === normalize(a.title || '')))).map(l => ({
       text: l.text, page: p.page, origin: p.origin, confidence: l.confidence

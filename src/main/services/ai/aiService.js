@@ -48,78 +48,24 @@ function verifyGgufHeader(filePath) {
   }
 }
 
-function verifyFileSha256(filePath, expectedSha256) {
-  try {
-    if (!filePath || !fs.existsSync(filePath) || !expectedSha256) return false;
-    const hash = crypto.createHash('sha256');
-    const buffer = fs.readFileSync(filePath);
-    hash.update(buffer);
-    const calculated = hash.digest('hex').toLowerCase();
-    return calculated === expectedSha256.toLowerCase();
-  } catch (e) {
-    return false;
-  }
-}
+const {DEFAULT_MODEL_ID,QUALITY_MODEL_ID,RETIRED_MODEL,isRetired,verifyFileSha256}=require('./modelPolicy');
 
 class AiService {
   constructor() {
+    this.serverManager = serverManager;
     this.activeDownloads = new Map();
     this.builtinEngine = new BuiltinLocalAiEngine();
-    this.activeModelId = 'qwen2.5-3b-instruct-q4'; // Default to 3B or first installed
+    this.selectionFile=path.join(getUserDataDir(),'ai-model-selection.json');
+    this.selection={};try{this.selection=JSON.parse(fs.readFileSync(this.selectionFile,'utf8'));}catch(_){}
+    const previous=this.selection.activeModelId;
+    this.activeModelId=previous&&!isRetired({id:previous})?previous:DEFAULT_MODEL_ID;
     this.catalog = this.loadCatalog();
+    this.retirementPending=isRetired({id:previous})||fs.existsSync(this.getModelFilePath(RETIRED_MODEL));
+    if(isRetired({id:previous})){this.selection.retiredModelDetected=true;this.persistSelection();}
   }
 
   getDefaultCatalog() {
-    return [
-      {
-        id: 'qwen2.5-1.5b-instruct-q4',
-        name: 'Qwen 2.5 1.5B Instruct',
-        provider: 'huggingface',
-        repoId: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF',
-        filename: 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
-        hfModel: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M',
-        format: 'GGUF',
-        quantization: 'Q4_K_M',
-        engine: 'llama.cpp',
-        sizeBytes: 1117320736,
-        sha256: '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e',
-        recommendedRamGB: 8,
-        recommended: true,
-        description: 'Perfil recomendado: equilibrio ideal entre precisión bilingüe (ES/CA), velocidad y consumo moderado de memoria.'
-      },
-      {
-        id: 'qwen2.5-0.5b-instruct-q4',
-        name: 'Qwen 2.5 0.5B Instruct (Ultra ligero)',
-        provider: 'huggingface',
-        repoId: 'Qwen/Qwen2.5-0.5B-Instruct-GGUF',
-        filename: 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
-        hfModel: 'Qwen/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M',
-        format: 'GGUF',
-        quantization: 'Q4_K_M',
-        engine: 'llama.cpp',
-        sizeBytes: 491400032,
-        sha256: '74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db',
-        recommendedRamGB: 4,
-        recommended: false,
-        description: 'Perfil ligero: optimizado para ordenadores con menos de 4 GB de memoria RAM o recursos reducidos.'
-      },
-      {
-        id: 'qwen2.5-3b-instruct-q4',
-        name: 'Qwen 2.5 3B Instruct (Alta precisión)',
-        provider: 'huggingface',
-        repoId: 'Qwen/Qwen2.5-3B-Instruct-GGUF',
-        filename: 'qwen2.5-3b-instruct-q4_k_m.gguf',
-        hfModel: 'Qwen/Qwen2.5-3B-Instruct-GGUF:Q4_K_M',
-        format: 'GGUF',
-        quantization: 'Q4_K_M',
-        engine: 'llama.cpp',
-        sizeBytes: 2104932768,
-        sha256: '626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d',
-        recommendedRamGB: 16,
-        recommended: false,
-        description: 'Perfil avanzado: máxima calidad en redacciones extensas y revisiones estilísticas para equipos con 8 GB o más de RAM.'
-      }
-    ];
+    return JSON.parse(JSON.stringify(require('../../../../data/ai_models.json').models));
   }
 
   loadCatalog() {
@@ -166,7 +112,7 @@ class AiService {
       }
     }
 
-    return merged;
+    return merged.filter(model=>!isRetired(model));
   }
 
   getModelsDirectory() {
@@ -242,6 +188,11 @@ class AiService {
       recomendacionCa = 'El teu equip compta amb potència excel·lent per executar qualsevol dels perfils disponibles.';
     }
 
+    let compatibleGpu=false;
+    try{const devices=await serverManager.backendSelection.listDevices(),qualityModel=this.getDefaultCatalog().find(m=>m.id==='qwen3-4b-instruct-2507-q4');compatibleGpu=require('./backendSelection').candidateDevices(devices,qualityModel?.expectedSizeBytes||qualityModel?.sizeBytes||3*1024**3).length>0;}catch(_){}
+    const recommendedModelId=compatibleGpu||totalMemBytes>=16*1024**3?'qwen3-4b-instruct-2507-q4':'qwen2.5-1.5b-instruct-q4';
+    if(recommendedModelId==='qwen3-4b-instruct-2507-q4'){recomendacion='Para textos en catalán recomendamos Qwen3 4B. Tu equipo tiene GPU compatible o al menos 16 GB de RAM.';recomendacionCa='Per a textos en català recomanem Qwen3 4B. El teu equip té GPU compatible o almenys 16 GB de RAM.';}
+    else{recomendacion='Para equipos modestos recomendamos Qwen 2.5 1.5B. Su calidad en catalán es limitada; revisa el texto.';recomendacionCa='Per a equips modestos recomanem Qwen 2.5 1.5B. La seva qualitat en català és limitada; revisa el text.';}
     const runtimePath = getAiRuntimePath();
     const runtimeAvailable = !!(runtimePath && fs.existsSync(runtimePath));
 
@@ -250,6 +201,8 @@ class AiService {
       cpuModel,
       cpuCores,
       totalMemGb,
+      recommendedModelId,
+      compatibleGpu,
       freeMemGb,
       diskFreeGb,
       recomendacion,
@@ -309,7 +262,7 @@ class AiService {
       }
 
       // Sincronizar con SQLite
-      const downloadUrl = `https://huggingface.co/${def.repoId}/resolve/main/${def.filename}`;
+      const downloadUrl = def.downloadUrl || `https://huggingface.co/${def.repoId}/resolve/${def.revision||'main'}/${def.filename}`;
       const existing = db.exec('SELECT * FROM ai_modelos WHERE id = ?', [def.id]);
       if (!existing || existing.length === 0 || existing[0].values.length === 0) {
         db.run(`
@@ -317,7 +270,7 @@ class AiService {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           def.id, def.name, def.filename, fileValid ? targetPath : null, def.sizeBytes,
-          def.id.includes('1.5b') ? '1.5B' : (def.id.includes('0.5b') ? '0.5B' : '3B'),
+          def.id.includes('1.5b') ? '1.5B' : (def.id.includes('0.5b') ? '0.5B' : '4B'),
           def.quantization, def.recommended ? 1 : 0, fileValid ? 1 : 0,
           def.description, downloadUrl
         ]);
@@ -339,13 +292,17 @@ class AiService {
         tamano_bytes: def.sizeBytes,
         sizeBytes: def.sizeBytes,
         sha256: def.sha256 || null,
-        parametros: def.id.includes('1.5b') ? '1.5B' : (def.id.includes('0.5b') ? '0.5B' : '3B'),
+        license: def.license || null,
+        licenseUrl: def.licenseUrl || null,
+        licenseRestricted: def.licenseRestricted === true || /research|non[- ]commercial|(?:^|[- ])nc(?:$|[- ])/i.test(def.license || ''),
+        parametros: def.id.includes('1.5b') ? '1.5B' : (def.id.includes('0.5b') ? '0.5B' : '4B'),
         cuantizacion: def.quantization,
         recomendado: !!def.recommended,
         instalado: fileValid,
         installed: fileValid,
         estado: estado,
         descripcion: def.description,
+        descripcionCa: def.descriptionCa || null,
         url_descarga: downloadUrl,
         runtimeAvailable
       });
@@ -393,7 +350,7 @@ class AiService {
             totalBytes: extra.totalBytes || model.tamano_bytes,
             speedBytesSec: extra.speedBytesSec || 0,
             etaSeconds: extra.etaSeconds || 0,
-            message: `FASE ${phaseNum}: ${phaseName}`
+            message: `Paso ${phaseNum}: ${phaseName}`
           });
         } catch (e) {}
       }
@@ -693,7 +650,7 @@ class AiService {
     }
 
     const models = await this.getModels();
-    const model = models.find(m => m.id === modelId);
+    const model = modelId===RETIRED_MODEL.id ? RETIRED_MODEL : models.find(m => m.id === modelId);
     if (!model) return false;
 
     const targetFile = this.getModelFilePath(model);
@@ -713,25 +670,37 @@ class AiService {
   }
 
   async getActiveProvider() {
-    const models = await this.getModels();
-    const installed = models.filter(m => m.instalado && m.ruta && fs.existsSync(m.ruta) && verifyGgufHeader(m.ruta));
-
-    if (installed.length > 0) {
-      let active = null;
-      if (this.activeModelId) {
-        active = installed.find(m => m.id === this.activeModelId);
-      }
-      if (!active) {
-        active = installed.find(m => m.id.includes('3b')) || installed[0];
-      }
-      this.activeModelId = active.id;
-      return new LlamaCppProvider(active.ruta, active.id);
-    }
+    const availability=await this.getAvailability();
+    if(availability.available)return new LlamaCppProvider(availability.modelPath,availability.modelId);
     return this.builtinEngine;
   }
 
+  async getAvailability() {
+    const candidates=this.catalog.filter(def=>def.id&&def.filename).map(def=>({...def,file:this.getModelFilePath(def)})).filter(def=>verifyGgufHeader(def.file));
+    const preferred=this.activeModelId;
+    const preference=id=>id===DEFAULT_MODEL_ID?0:id===QUALITY_MODEL_ID?1:2;
+    candidates.sort((a,b)=>Number(b.id===preferred)-Number(a.id===preferred)||preference(a.id)-preference(b.id));
+    for(const model of candidates){
+      const key=await this.serverManager.backendSelection.modelKey(model.file);
+      if(!model.sha256||key.modelHash!==model.sha256)continue;
+      let backend=!this.serverManager.backendSelection.config.failed&&this.serverManager.process&&this.serverManager.status==='READY'&&this.serverManager.activeModelId===model.id?this.serverManager.activeBackend:(this.serverManager.backendSelection.config.mode!=='cpu'&&this.serverManager.backendSelection.config.key===key.key&&this.serverManager.backendSelection.config.backend==='gpu'&&!this.serverManager.backendSelection.config.failed?'gpu':'cpu');
+      try{await this.serverManager.backendSelection.verify(backend==='gpu'?'vulkan':'cpu');}catch(_){backend='cpu';try{await this.serverManager.backendSelection.verify('cpu');}catch(_){continue;}}
+      if(this.activeModelId!==model.id){this.activeModelId=model.id;this.persistSelection();}
+      return {available:true,engine:backend==='gpu'?'ia-gpu':'ia-cpu',modelId:model.id,modelName:model.name,modelPath:model.file};
+    }
+    return {available:false,engine:'sin-ia',modelId:null,modelName:null,modelPath:null};
+  }
+
+  persistSelection(){
+    this.selection.activeModelId=this.activeModelId;
+    fs.mkdirSync(path.dirname(this.selectionFile),{recursive:true});
+    const temporary=this.selectionFile+'.tmp';fs.writeFileSync(temporary,JSON.stringify(this.selection,null,2)+'\n');fs.renameSync(temporary,this.selectionFile);
+  }
+  getRetirementNotice(){return (this.retirementPending||this.selection.retiredModelDetected)&&!this.selection.retirementAcknowledged?{retiredModelId:RETIRED_MODEL.id,replacementModelId:QUALITY_MODEL_ID}:null;}
+  acknowledgeRetirement(){this.selection.retirementAcknowledged=true;this.persistSelection();}
   setActiveModel(modelId) {
-    this.activeModelId = modelId;
+    if(!this.catalog.some(model=>model.id===modelId&&!isRetired(model)))return false;
+    this.activeModelId = modelId;this.persistSelection();
     return true;
   }
 
@@ -831,11 +800,14 @@ class AiService {
       engine: 'llama.cpp',
       runtimeExists: !!(runtime && runtime.exists),
       runtimeAvailable: !!(runtime && runtime.exists),
-      runtimePath: runtime.executablePath || 'No disponible',
-      runtimeSource: runtime.source,
+      runtimePath: serverDiag.serverRunning?serverDiag.runtimePath:'No se está ejecutando ningún servidor',
+      runtimeSource: serverDiag.serverRunning?serverDiag.runtimeSource:runtime.source,
+      backend:serverDiag.backend,
+      device:serverDiag.device,
+      gpuLayers:serverDiag.gpuLayers,
       modelAvailable,
       modelId: this.activeModelId,
-      modelName: activeModel ? activeModel.name : (this.activeModelId || 'Qwen 2.5 3B Instruct'),
+      modelName: activeModel ? activeModel.name : (this.activeModelId || 'Ningún modelo seleccionado'),
       modelPath: modelPath || 'No disponible',
       serverRunning: serverDiag.serverRunning,
       serverReady: serverDiag.serverReady,
@@ -886,7 +858,7 @@ class AiService {
       }
     }
 
-    const uniqueAvisos = Array.from(new Set(avisos));
+    const uniqueAvisos = Array.from(new Set(Array.isArray(result?.qualityWarnings)?result.avisos:avisos));
 
     return {
       ok: true,
@@ -903,9 +875,22 @@ class AiService {
   // --- Contrato común para todas las operaciones de IA ---
 
   async runAiTask(taskName, params) {
+    const models=Object.fromEntries((this.catalog||[]).map(model=>[model.id,model.name||model.nombre||model.id]));
+    const result=await require('./generationSource').run(models,()=>this.executeAiTask(taskName,params));
+    return {...result,availability:await this.getAvailability()};
+  }
+
+  async executeAiTask(taskName, params) {
     const startTime = Date.now();
     try {
       params = await require('./municipalContext').enrichWritingParams(taskName, params);
+      const contract=require('../../../shared/writingContract');
+      const generationTask=contract.MIN_SELECTED[taskName]?taskName:params.generationTask;
+      if(contract.MIN_SELECTED[generationTask])await require('./orthography').ready();
+      if(contract.MIN_SELECTED[taskName]){
+        const minimum=contract.minimumState(generationTask,params.selectedMeasures||[],params.idioma_salida||params.idioma||'es',params);
+        if(!minimum.allowed)return {ok:false,data:null,texto:null,titulos:[],avisos:[minimum.message],error:{code:'MIN_SELECTED_MEASURES',message:minimum.message},selection:minimum};
+      }
       const normalizedParams = {
         ...params,
         area: params?.area || params?.area_nombre || '',
@@ -951,7 +936,18 @@ class AiService {
       let raw;
       try {
         raw = await provider.generate(taskName, normalizedParams);
+        if(provider===this.builtinEngine)require('./generationSource').recordBuiltin({labelOnly:isTranslation&&!useSelectedModel});
+        if(raw?.ok===false&&contract.MIN_SELECTED[generationTask])return raw;
+        if(raw?.ok===false&&provider!==this.builtinEngine){
+          raw=await this.builtinEngine.generate(taskName,normalizedParams);
+          provider=this.builtinEngine;require('./generationSource').recordBuiltin({fallbackReason:'ai-failed'});
+        }
       } catch (genErr) {
+        if(contract.MIN_SELECTED[generationTask])return {ok:false,data:null,texto:null,error:{code:'GENERATION_FAILED',message:params.idioma==='ca'?'La IA no ha pogut generar aquest text.':'La IA no ha podido generar este texto.'}};
+        if(provider!==this.builtinEngine){
+          raw=await this.builtinEngine.generate(taskName,normalizedParams);
+          provider=this.builtinEngine;require('./generationSource').recordBuiltin({fallbackReason:'ai-failed'});
+        }else{
         if (isTranslation && !useSelectedModel) {
           return {
             ok: false,
@@ -973,6 +969,7 @@ class AiService {
           };
         }
         throw genErr;
+        }
       }
 
       if (raw && raw.ok === false) {
@@ -999,6 +996,11 @@ class AiService {
         return raw;
       }
 
+      if(isTranslation&&contract.MIN_SELECTED[generationTask]&&!raw.qualityWarnings){
+        const quality=require('./writingQuality'),data=quality.formatAndValidate(generationTask,raw.data||raw,normalizedParams);
+        const qualityWarnings=data.validation.warnings.map(w=>({...w,message_es:quality.warningText(w,'es'),message_ca:quality.warningText(w,'ca')}));
+        raw={...raw,...data,data,texto:data.formattedText,qualityWarnings,avisos:require('../../../shared/writingWarnings').messages(qualityWarnings,normalizedParams.idioma)};
+      }
       const verified = this.verifyProposal(raw, normalizedParams);
       return {
         ...raw,

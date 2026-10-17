@@ -38,6 +38,7 @@ const App = {
     this.bindTopBar();
     this.bindGlobalShortcuts();
     this.initUpdater();
+    if(window.GenerationUi)await window.GenerationUi.init();
 
     if (window.Tutorial) {
       window.Tutorial.init();
@@ -234,6 +235,7 @@ const App = {
     ];
     if (projectRequired.includes(viewName)) {
       await this.ensureProjectHydrated();
+      if (!this.currentProject) return this.navigateTo('home');
     }
 
     // Update active nav item in sidebar
@@ -423,6 +425,13 @@ const App = {
     this.navigateTo('adaptar-medidas', { measureId, isPropia });
   },
 
+  async openContentManager() {
+    await this.navigateTo('configuracion');
+    const state = await window.api.checkContentUpdates();
+    this.handleContentUpdateStatus(state);
+    document.querySelector('#options-content-updater-status-box')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  },
+
   async showNewProjectModal() {
     const isCa = window.i18n && window.i18n.getLang() === 'ca';
     let sources = [];
@@ -430,7 +439,8 @@ const App = {
       sources = await window.api.getSourcePrograms(false);
     } catch (e) {}
     if (!sources || sources.length === 0) {
-      sources = [{ id: 'fuente_marco_oficial', nombre: 'Programa Marco 2027', activo: true }];
+      await this.navigateTo('home');
+      return;
     }
     const activeSource = sources.find(s => s.activo) || sources[0];
 
@@ -668,7 +678,8 @@ const App = {
               partido: ficha.partido || data.partido,
               organizacion: ficha.organizacion || data.organizacion,
               mandato: ficha.mandato || data.mandato,
-              lema: ficha.lema,
+              lema_es: window.Lema.getLema(ficha, 'es'),
+              lema_ca: window.Lema.getLema(ficha, 'ca'),
               fecha_electoral: ficha.fecha_electoral,
               presupuesto_municipal: ficha.presupuesto_municipal,
               presupuesto_inversiones: ficha.presupuesto_inversiones,
@@ -1065,6 +1076,7 @@ const App = {
   handleContentUpdateStatus(state) {
     if (!state || typeof state !== 'object') return;
     this.contentUpdaterState = state;
+    if (this.currentView === 'home' && window.HomeView) window.HomeView.updateBootstrapProgress(state);
 
     // Refresh Options if visible
     if ((this.currentView === 'configuracion' || this.currentView === 'opciones') &&
@@ -1078,10 +1090,11 @@ const App = {
     }
 
     // Show "available" notification if new content detected
-    if (state.status === 'AVAILABLE' && state.availableItems && state.availableItems.length > 0 && !this._contentBannerDismissed) {
-      this.showContentUpdateBanner(state.availableItems[0]);
+    const officialAvailable = (state.availableItems || []).filter(item => item.official === true && item.is_test_fixture !== true);
+    if (!state.bootstrapInProgress && state.status === 'AVAILABLE' && officialAvailable.length > 0 && !this._contentBannerDismissed) {
+      this.showContentUpdateBanner(officialAvailable[0]);
     }
-    if (state.status !== 'AVAILABLE') {
+    if (state.status !== 'AVAILABLE' || officialAvailable.length === 0 || state.bootstrapInProgress) {
       const existing = document.getElementById('global-content-update-banner');
       if (existing) existing.remove();
       this._contentBannerDismissed = false;
@@ -1099,7 +1112,7 @@ const App = {
     }
     const rawTitle = typeof item.title === 'object' ? (isCa ? (item.title?.ca || item.title?.es) : (item.title?.es || item.title?.ca)) : (item.title_es || item.title || '');
     const title = escapeHtml(rawTitle);
-    const isOfficial = item.official === true;
+    const isOfficial = item.official === true && item.is_test_fixture !== true;
     const officialLabel = isOfficial
       ? (isCa ? 'OFICIAL' : 'OFICIAL')
       : (isCa ? 'CONTINGUT DE PROVA · NO OFICIAL' : 'CONTENIDO DE PRUEBA · NO OFICIAL');
@@ -1143,7 +1156,9 @@ const App = {
     });
   },
 
-  showContentUpdateDetailModal(item) {
+  showContentUpdateDetailModal(item, options = {}) {
+    const isTest = item.official !== true || item.is_test_fixture === true;
+    if (isTest && options.allowTestFixture !== true) return;
     const isCa = window.i18n && window.i18n.getLang() === 'ca';
     const modalContainer = document.querySelector('#modal-container') || document.body;
 
@@ -1152,7 +1167,7 @@ const App = {
     const rawSummary = typeof item.summary === 'object' ? (isCa ? (item.summary?.ca || item.summary?.es) : (item.summary?.es || item.summary?.ca)) : (item.summary_es || item.summary || '');
     const summary = escapeHtml(rawSummary);
     const contentVersion = escapeHtml(item.content_version || '');
-    const isOfficial = item.official === true;
+    const isOfficial = item.official === true && item.is_test_fixture !== true;
     let langsStr = '';
     if (Array.isArray(item.languages)) {
       langsStr = item.languages.map(l => l === 'es' ? 'Castellano' : (l === 'ca' ? 'Català' : l)).join(' · ');
@@ -1268,7 +1283,7 @@ const App = {
         }
 
         try {
-          await window.api.installContentUpdate(item.content_id || item.id);
+          await window.api.installContentUpdate(item.content_id || item.id, { allowTestFixture: isTest && options.allowTestFixture === true });
         } catch (err) {
           if (removeListener) removeListener();
           setProgress(escapeHtml(err && err.message ? err.message : (isCa ? 'Error en la instal·lació.' : 'Error en la instalación.')), true);

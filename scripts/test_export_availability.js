@@ -21,7 +21,14 @@ async function main() {
   vm.runInNewContext(mainSource.slice(start, end), { ipcMain: { handle: (_, fn) => handler = fn }, shell: { openExternal: async url => opened = url }, console });
   assert.equal(await handler(null, 'https://www.libreoffice.org/download/'), true);
   assert.equal(opened, 'https://www.libreoffice.org/download/');
+  for (const size of ['0.5', '1.5']) {
+    const licenseUrl = `https://huggingface.co/Qwen/Qwen2.5-${size}B-Instruct-GGUF/blob/main/LICENSE`;
+    assert.equal(await handler(null, licenseUrl), true);
+    assert.equal(opened, licenseUrl);
+    assert.equal(await handler(null, licenseUrl + '?next=bad'), false);
+  }
   for (const url of ['https://www.libreoffice.org/download/?next=bad', 'https://www.libreoffice.org.evil/download/', 'file:///C:/test', 'javascript:alert(1)']) assert.equal(await handler(null, url), false);
+  const qualityLicense='https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/blob/main/LICENSE';assert.equal(await handler(null,qualityLicense),true);assert.equal(opened,qualityLicense);assert.equal(await handler(null,qualityLicense+'?next=bad'),false);
   console.log('PASS export: PDF disabled without converter in ES/CA; DOCX remains enabled; LibreOffice download exact URL only.');
 }
 main().catch(err => { console.error(err); process.exitCode = 1; });

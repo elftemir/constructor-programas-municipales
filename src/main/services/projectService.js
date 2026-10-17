@@ -1,3 +1,4 @@
+const { getLema, normalizeLema } = require('../utils/lema');
 const { getDb, save } = require('../db/database');
 const crypto = require('crypto');
 
@@ -34,13 +35,10 @@ async function getProjects() {
 
 function calculateProjectStats(db, projectId) {
   const projRow = queryOne(db, `SELECT fuente_id FROM proyectos WHERE id = ?`, [projectId]);
-  const fuenteId = projRow?.fuente_id || 'fuente_marco_oficial';
+  const fuenteId = projRow?.fuente_id || null;
 
   let totalMarcoRow = queryOne(db, `SELECT COUNT(*) as count FROM medidas WHERE fuente_id = ?`, [fuenteId]);
-  if (!totalMarcoRow || totalMarcoRow.count === 0) {
-    totalMarcoRow = queryOne(db, `SELECT COUNT(*) as count FROM medidas WHERE fuente_id = 'fuente_marco_oficial'`);
-  }
-  const totalMarco = totalMarcoRow ? totalMarcoRow.count : 123;
+  const totalMarco = totalMarcoRow ? totalMarcoRow.count : 0;
 
   const counts = queryAll(db, `
     SELECT estado, COUNT(*) as count 
@@ -96,13 +94,9 @@ async function getProject(id) {
   if (!project) return null;
 
   const stats = calculateProjectStats(db, id);
-  const fuenteId = project.fuente_id || 'fuente_marco_oficial';
+  const fuenteId = project.fuente_id || null;
   let areas = queryAll(db, `SELECT * FROM areas WHERE fuente_id = ? ORDER BY orden ASC`, [fuenteId]);
   let medidas = queryAll(db, `SELECT * FROM medidas WHERE fuente_id = ? ORDER BY orden ASC`, [fuenteId]);
-  if (!areas || areas.length === 0) {
-    areas = queryAll(db, `SELECT * FROM areas WHERE fuente_id = 'fuente_marco_oficial' ORDER BY orden ASC`);
-    medidas = queryAll(db, `SELECT * FROM medidas WHERE fuente_id = 'fuente_marco_oficial' ORDER BY orden ASC`);
-  }
 
   const decisiones = queryAll(db, `SELECT * FROM decisiones_medidas WHERE proyecto_id = ?`, [id]);
   const medidasPropias = queryAll(db, `SELECT * FROM medidas_propias WHERE proyecto_id = ? ORDER BY orden ASC, created_at ASC`, [id]);
@@ -324,16 +318,21 @@ async function createProject(data) {
 
   const sourceProgramService = require('./sourceProgramService');
   const activeFuente = await sourceProgramService.getActive();
-  const fuenteId = data.fuente_id || (activeFuente ? activeFuente.id : 'fuente_marco_oficial');
+  const fuenteId = data.fuente_id || (activeFuente ? activeFuente.id : null);
+  if (!fuenteId || !queryOne(db, 'SELECT id FROM programas_fuente WHERE id = ? AND archivado = 0 AND retirado_por_prueba = 0', [fuenteId])) {
+    const error = new Error('Primero descarga un Programa Marco desde Programas fuente o importa un documento (PDF o DOCX).');
+    error.code = 'ERR_NO_SOURCE';
+    throw error;
+  }
 
   db.run(`
     INSERT INTO proyectos (
       id, fuente_id, municipio, provincia, comunidad_autonoma, partido, organizacion, mandato,
-      idioma_principal, idioma_secundario, habitantes, fecha_electoral, lema,
+      idioma_principal, idioma_secundario, habitantes, fecha_electoral, lema_es, lema_ca,
       presupuesto_municipal, presupuesto_inversiones, empresas_municipales_json,
       servicios_json, logo_path, codigo_ine, poblacion_fuente, poblacion_ano,
       poblacion_modificada, organizacion_modificada, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     id,
     fuenteId,
@@ -347,7 +346,8 @@ async function createProject(data) {
     idiomaSecundario,
     data.habitantes ? parseInt(data.habitantes, 10) : null,
     fechaElectoral,
-    data.lema ? data.lema.slice(0, 60) : null,
+    normalizeLema(getLema(data, 'es')),
+    normalizeLema(getLema(data, 'ca')),
     data.presupuesto_municipal ? parseFloat(data.presupuesto_municipal) : null,
     data.presupuesto_inversiones ? parseFloat(data.presupuesto_inversiones) : null,
     JSON.stringify(data.empresas_municipales || []),
@@ -364,9 +364,6 @@ async function createProject(data) {
 
   // Initialize measures with state 'sin_revisar' in project's language from source program
   let catalogMedidas = queryAll(db, `SELECT * FROM medidas WHERE fuente_id = ? ORDER BY orden ASC`, [fuenteId]);
-  if (!catalogMedidas || catalogMedidas.length === 0) {
-    catalogMedidas = queryAll(db, `SELECT * FROM medidas WHERE fuente_id = 'fuente_marco_oficial' ORDER BY orden ASC`);
-  }
   for (const m of catalogMedidas) {
     const decId = `dec_${id}_${m.id}`;
     const initialTitulo = (idiomaPrincipal === 'ca' && m.titulo_ca) ? m.titulo_ca : (m.titulo_es || m.titulo);
@@ -390,7 +387,7 @@ async function createProject(data) {
     ]);
   }
 
-  // Initialize empty general texts (Fase 1: No inventar contenido predeterminado)
+  // Initialize empty general texts (Regla: No inventar contenido predeterminado)
   db.run(`
     INSERT INTO textos_generales (
       proyecto_id, presentacion_titulo, presentacion_entradilla,
@@ -472,9 +469,8 @@ async function updateProjectData(id, data) {
     }
   }
 
-  const lema = data.lema !== undefined
-    ? (data.lema !== null && data.lema !== '' ? String(data.lema).trim().slice(0, 60) : null)
-    : existing.lema;
+  const lema_es = normalizeLema(data.lema_es !== undefined ? data.lema_es : getLema(existing, 'es'));
+  const lema_ca = normalizeLema(data.lema_ca !== undefined ? data.lema_ca : getLema(existing, 'ca'));
 
   const presupuesto_municipal = data.presupuesto_municipal !== undefined
     ? (data.presupuesto_municipal !== null && data.presupuesto_municipal !== '' ? parseFloat(data.presupuesto_municipal) : null)
@@ -524,7 +520,8 @@ async function updateProjectData(id, data) {
       idioma_secundario = ?,
       habitantes = ?,
       fecha_electoral = ?,
-      lema = ?,
+      lema_es = ?,
+      lema_ca = ?,
       presupuesto_municipal = ?,
       presupuesto_inversiones = ?,
       empresas_municipales_json = ?,
@@ -548,7 +545,8 @@ async function updateProjectData(id, data) {
     idioma_secundario,
     habitantes,
     fechaElectoral,
-    lema,
+    lema_es,
+    lema_ca,
     presupuesto_municipal,
     presupuesto_inversiones,
     empresas_municipales_json,
@@ -878,6 +876,7 @@ async function deleteOwnMeasure(id) {
 }
 
 async function updateGeneralTexts(projectId, data) {
+  if(data.repairInternalJson===true)return repairGeneralTextFormat(projectId,data.userConfirmed===true);
   const db = await getDb();
   const now = new Date().toISOString();
 
@@ -886,6 +885,9 @@ async function updateGeneralTexts(projectId, data) {
   const secLang = pLang === 'ca' ? 'es' : 'ca';
 
   const existing = queryOne(db, `SELECT * FROM textos_generales WHERE proyecto_id = ?`, [projectId]);
+  const format=require('../../shared/textFormat');
+  const oldStrings=new Set(format.strings((await getProject(projectId))?.textos_generales||{}));
+  for(const text of format.strings(data))if(format.internalObject(text)&&!oldStrings.has(text))throw new Error('El texto generado debe guardarse formateado, nunca como JSON interno.');
   let existingBilingue = {};
   try {
     if (existing && existing.bilingue_json) existingBilingue = JSON.parse(existing.bilingue_json);
@@ -1011,18 +1013,10 @@ async function updateGeneralTexts(projectId, data) {
 }
 
 async function getCatalogInfo() {
-  const db = await getDb();
-  const info = queryOne(db, `SELECT * FROM catalogo_info WHERE id = 'marco_principal'`);
-  const areas = queryAll(db, `SELECT * FROM areas ORDER BY orden ASC`);
-  const medidas = queryAll(db, `SELECT * FROM medidas ORDER BY orden ASC`);
-
-  return {
-    info,
-    areas: areas.map(a => ({
-      ...a,
-      medidas: medidas.filter(m => m.area_id === a.id)
-    }))
-  };
+  const source = await require('./sourceProgramService').getActive();
+  if (!source) return { info: null, areas: [] };
+  return { info: { id: source.id, descripcion: source.nombre, version: source.content_version || '',
+    total_areas: source.areas.length, total_medidas: source.medidas.length }, areas: source.areas };
 }
 
 async function duplicateProject(projectId) {
@@ -1037,16 +1031,16 @@ async function duplicateProject(projectId) {
   db.run(`
     INSERT INTO proyectos (
       id, fuente_id, municipio, provincia, comunidad_autonoma, partido, organizacion, mandato,
-      idioma_principal, idioma_secundario, habitantes, fecha_electoral, lema,
+      idioma_principal, idioma_secundario, habitantes, fecha_electoral, lema_es, lema_ca,
       presupuesto_municipal, presupuesto_inversiones, empresas_municipales_json,
       servicios_json, logo_path, codigo_ine, poblacion_fuente, poblacion_ano,
       poblacion_modificada, organizacion_modificada, mapeo_fuentes_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
-    newId, original.fuente_id || 'fuente_marco_oficial', copyName, original.provincia, original.comunidad_autonoma,
+    newId, original.fuente_id || null, copyName, original.provincia, original.comunidad_autonoma,
     original.partido, `${original.partido} ${copyName}`, original.mandato,
     original.idioma_principal, original.idioma_secundario, original.habitantes,
-    original.fecha_electoral, original.lema, original.presupuesto_municipal,
+    original.fecha_electoral, normalizeLema(getLema(original, 'es')), normalizeLema(getLema(original, 'ca')), original.presupuesto_municipal,
     original.presupuesto_inversiones, original.empresas_municipales_json,
     original.servicios_json, original.logo_path,
     original.codigo_ine, original.poblacion_fuente || 'Idescat / INE',
@@ -1067,7 +1061,7 @@ async function duplicateProject(projectId) {
   }
   const hasPrincipal = fuentesRel.some(f => f.rol === 'principal');
   if (!hasPrincipal) {
-    const pFuenteId = original.fuente_id || 'fuente_marco_oficial';
+    const pFuenteId = original.fuente_id || null;
     db.run(`
       INSERT OR REPLACE INTO proyecto_fuentes (id, proyecto_id, fuente_id, rol, fecha_anadida)
       VALUES (?, ?, ?, 'principal', ?)
@@ -1166,7 +1160,8 @@ async function duplicateProjectForMunicipio(sourceProjectId, newMunicipioData, f
   let partido = original.partido || 'Podemos';
   const mandato = original.mandato || '2027–2031';
   let organizacion = `${partido} ${newMun}`.trim();
-  let lema = null;
+  let lema_es = null;
+  let lema_ca = null;
   let fechaElectoral = null;
   let presupuestoMun = null;
   let presupuestoInv = null;
@@ -1186,7 +1181,8 @@ async function duplicateProjectForMunicipio(sourceProjectId, newMunicipioData, f
       organizacion = fichaData.organizacion;
       organizacionModificada = 1;
     }
-    if (fichaData.lema) lema = fichaData.lema;
+    lema_es = normalizeLema(getLema(fichaData, 'es'));
+    lema_ca = normalizeLema(getLema(fichaData, 'ca'));
     if (fichaData.fecha_electoral) fechaElectoral = fichaData.fecha_electoral;
     if (fichaData.presupuesto_municipal !== null && fichaData.presupuesto_municipal !== undefined) {
       presupuestoMun = fichaData.presupuesto_municipal;
@@ -1210,16 +1206,16 @@ async function duplicateProjectForMunicipio(sourceProjectId, newMunicipioData, f
   db.run(`
     INSERT INTO proyectos (
       id, fuente_id, municipio, provincia, comunidad_autonoma, partido, organizacion, mandato,
-      idioma_principal, idioma_secundario, habitantes, fecha_electoral, lema,
+      idioma_principal, idioma_secundario, habitantes, fecha_electoral, lema_es, lema_ca,
       presupuesto_municipal, presupuesto_inversiones, empresas_municipales_json,
       servicios_json, logo_path, codigo_ine, poblacion_fuente, poblacion_ano,
       poblacion_modificada, organizacion_modificada, mapeo_fuentes_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
-    newId, original.fuente_id || 'fuente_marco_oficial', newMun, newMunicipioData.provincia || '', newMunicipioData.comunidad_autonoma || 'Cataluña',
+    newId, original.fuente_id || null, newMun, newMunicipioData.provincia || '', newMunicipioData.comunidad_autonoma || 'Cataluña',
     partido, organizacion, mandato,
     original.idioma_principal, original.idioma_secundario, habitantes,
-    fechaElectoral, lema, presupuestoMun,
+    fechaElectoral, lema_es, lema_ca, presupuestoMun,
     presupuestoInv, JSON.stringify(empresas),
     JSON.stringify(servicios), logoPath,
     newMunicipioData.codigo_ine || null, poblacionFuente,
@@ -1239,7 +1235,7 @@ async function duplicateProjectForMunicipio(sourceProjectId, newMunicipioData, f
   }
   const hasPrincipal = fuentesRel.some(f => f.rol === 'principal');
   if (!hasPrincipal) {
-    const pFuenteId = original.fuente_id || 'fuente_marco_oficial';
+    const pFuenteId = original.fuente_id || null;
     db.run(`
       INSERT OR REPLACE INTO proyecto_fuentes (id, proyecto_id, fuente_id, rol, fecha_anadida)
       VALUES (?, ?, ?, 'principal', ?)
@@ -1474,7 +1470,10 @@ function validateImportedProjectJson(rawInput) {
 
   const habitantes = requireOptNumber(p.habitantes, 'proyecto.habitantes');
   const fecha_electoral = requireOptString(p.fecha_electoral, 'proyecto.fecha_electoral', 50);
-  const lema = requireOptString(p.lema, 'proyecto.lema', 1000);
+  // Los respaldos antiguos asignan su único lema al idioma principal una sola vez.
+  const legacyLema = requireOptString(p.lema, 'proyecto.lema', 1000);
+  const lema_es = normalizeLema(requireOptString(p.lema_es, 'proyecto.lema_es', 1000) ?? (p.lema_es === undefined && idioma_principal === 'es' ? legacyLema : null));
+  const lema_ca = normalizeLema(requireOptString(p.lema_ca, 'proyecto.lema_ca', 1000) ?? (p.lema_ca === undefined && idioma_principal === 'ca' ? legacyLema : null));
   const presupuesto_municipal = requireOptNumber(p.presupuesto_municipal, 'proyecto.presupuesto_municipal');
   const presupuesto_inversiones = requireOptNumber(p.presupuesto_inversiones, 'proyecto.presupuesto_inversiones');
   const empresas_municipales_json = normalizeValidatedJsonField(
@@ -1500,7 +1499,7 @@ function validateImportedProjectJson(rawInput) {
   const poblacion_ano = requireOptString(p.poblacion_ano, 'proyecto.poblacion_ano', 20, true) || '2025';
   const poblacion_modificada = p.poblacion_modificada ? 1 : 0;
   const organizacion_modificada = p.organizacion_modificada ? 1 : 0;
-  const fuente_id = requireOptString(p.fuente_id, 'proyecto.fuente_id', 200) || 'fuente_marco_oficial';
+  const fuente_id = requireOptString(p.fuente_id, 'proyecto.fuente_id', 200) || null;
 
   const validatedDecisiones = [];
   if (data.decisiones !== undefined && data.decisiones !== null) {
@@ -1662,7 +1661,8 @@ function validateImportedProjectJson(rawInput) {
       idioma_secundario,
       habitantes,
       fecha_electoral,
-      lema,
+      lema_es,
+      lema_ca,
       presupuesto_municipal,
       presupuesto_inversiones,
       empresas_municipales_json,
@@ -1710,25 +1710,31 @@ async function importProjectJson(rawData) {
   const now = new Date().toISOString();
   const p = validated.proyecto;
 
-  // Verificar existencia de la fuente principal referenciada (fallback seguro a fuente_marco_oficial)
+  // A backup can reference a source not installed here. Only use a real available source.
   const existingSource = queryOne(db, `SELECT id FROM programas_fuente WHERE id = ?`, [p.fuente_id]);
-  const effectiveFuenteId = existingSource ? p.fuente_id : 'fuente_marco_oficial';
+  const availableSource = existingSource || await require('./sourceProgramService').getActive();
+  if (!availableSource) {
+    const error = new Error('Primero descarga o importa el programa fuente de esta copia de seguridad.');
+    error.code = 'ERR_NO_SOURCE';
+    throw error;
+  }
+  const effectiveFuenteId = availableSource.id;
 
   db.run('BEGIN TRANSACTION;');
   try {
     db.run(`
       INSERT INTO proyectos (
         id, fuente_id, municipio, provincia, comunidad_autonoma, partido, organizacion, mandato,
-        idioma_principal, idioma_secundario, habitantes, fecha_electoral, lema,
+        idioma_principal, idioma_secundario, habitantes, fecha_electoral, lema_es, lema_ca,
         presupuesto_municipal, presupuesto_inversiones, empresas_municipales_json,
         servicios_json, logo_path, codigo_ine, poblacion_fuente, poblacion_ano,
         poblacion_modificada, organizacion_modificada, mapeo_fuentes_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       newId, effectiveFuenteId, p.municipio, p.provincia, p.comunidad_autonoma,
       p.partido, p.organizacion, p.mandato,
       p.idioma_principal, p.idioma_secundario, p.habitantes,
-      p.fecha_electoral, p.lema, p.presupuesto_municipal,
+      p.fecha_electoral, p.lema_es, p.lema_ca, p.presupuesto_municipal,
       p.presupuesto_inversiones, p.empresas_municipales_json,
       p.servicios_json, null,
       p.codigo_ine, p.poblacion_fuente,
@@ -1928,7 +1934,18 @@ function resolveAreaIntroduction(project, areaId, idioma = null) {
   };
 }
 
+async function repairGeneralTextFormat(projectId,confirmed=false){
+  if(confirmed!==true)return {repaired:false,requiresConfirmation:true};
+  const project=await getProject(projectId);if(!project)throw new Error('Proyecto no encontrado.');
+  const correction=require('../../shared/textFormat').repairDocument(project.textos_generales||{});
+  if(!correction.changed)return {repaired:false,changes:[]};
+  const backup=require('../db/database').backupSnapshot('text-repair');
+  await updateGeneralTexts(projectId,{...correction.texts,idioma_edicion:project.idioma_principal||'es'});
+  return {repaired:true,backupPath:backup,changes:correction.changes};
+}
+
 module.exports = {
+  repairGeneralTextFormat,
   getProjects,
   getProject,
   createProject,

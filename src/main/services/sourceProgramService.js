@@ -16,6 +16,15 @@ function queryOne(db, sql, params = []) {
   return rows.length > 0 ? rows[0] : null;
 }
 
+function sourceFlags(db, item) {
+  // Old catalogues can lack updater metadata; preserve their protection without identifying a particular source.
+  const legacyReference = item?.tipo === 'marco_oficial' && !item.content_id && !item.instalado_por_actualizador;
+  const isOfficial = Boolean(item?.official) || legacyReference;
+  const currentContent = queryOne(db, 'SELECT 1 FROM contenidos_instalados WHERE is_current_official = 1 LIMIT 1');
+  const isProtectedOfficial = isOfficial && (Boolean(item?.oficial_actual_protegido) || (legacyReference && !currentContent));
+  return { isOfficial, isProtectedOfficial };
+}
+
 class SourceProgramService {
   countLinkedProjects(db, fuenteId) {
     const row = queryOne(
@@ -35,8 +44,8 @@ class SourceProgramService {
   async getAll(includeArchived = true) {
     const db = await getDb();
     const sql = includeArchived
-      ? `SELECT * FROM programas_fuente ORDER BY activo DESC, archivado ASC, created_at DESC`
-      : `SELECT * FROM programas_fuente WHERE archivado = 0 ORDER BY activo DESC, created_at DESC`;
+      ? `SELECT * FROM programas_fuente WHERE retirado_por_prueba = 0 ORDER BY activo DESC, archivado ASC, created_at DESC`
+      : `SELECT * FROM programas_fuente WHERE archivado = 0 AND retirado_por_prueba = 0 ORDER BY activo DESC, created_at DESC`;
     const list = queryAll(db, sql);
 
     return list.map(item => {
@@ -46,15 +55,7 @@ class SourceProgramService {
       } catch (e) {}
 
       const linkedCount = this.countLinkedProjects(db, item.id);
-      const isDefault = item.id === 'fuente_marco_oficial';
-      const isOfficial = isDefault ? true : Boolean(item.official);
-      let isProtectedOfficial = false;
-      if (isDefault) {
-        const hasOtherOfficial = queryOne(db, "SELECT 1 FROM contenidos_instalados WHERE is_current_official = 1 AND fuente_id != 'fuente_marco_oficial' LIMIT 1");
-        isProtectedOfficial = hasOtherOfficial ? Boolean(item.oficial_actual_protegido) : true;
-      } else {
-        isProtectedOfficial = isOfficial && Boolean(item.oficial_actual_protegido);
-      }
+      const { isOfficial, isProtectedOfficial } = sourceFlags(db, item);
 
       return {
         ...item,
@@ -84,15 +85,7 @@ class SourceProgramService {
     } catch (e) {}
 
     const linkedCount = this.countLinkedProjects(db, item.id);
-    const isDefault = item.id === 'fuente_marco_oficial';
-    const isOfficial = isDefault ? true : Boolean(item.official);
-    let isProtectedOfficial = false;
-    if (isDefault) {
-      const hasOtherOfficial = queryOne(db, "SELECT 1 FROM contenidos_instalados WHERE is_current_official = 1 AND fuente_id != 'fuente_marco_oficial' LIMIT 1");
-      isProtectedOfficial = hasOtherOfficial ? Boolean(item.oficial_actual_protegido) : true;
-    } else {
-      isProtectedOfficial = isOfficial && Boolean(item.oficial_actual_protegido);
-    }
+    const { isOfficial, isProtectedOfficial } = sourceFlags(db, item);
 
     const areas = queryAll(db, `SELECT * FROM areas WHERE fuente_id = ? ORDER BY orden ASC`, [id]);
     const medidas = queryAll(db, `SELECT * FROM medidas WHERE fuente_id = ? ORDER BY orden ASC`, [id]);
@@ -122,10 +115,10 @@ class SourceProgramService {
 
   async getActive() {
     const db = await getDb();
-    let active = queryOne(db, `SELECT * FROM programas_fuente WHERE activo = 1 AND archivado = 0 LIMIT 1`);
+    let active = queryOne(db, `SELECT * FROM programas_fuente WHERE activo = 1 AND archivado = 0 AND retirado_por_prueba = 0 LIMIT 1`);
     if (!active) {
       // Try to fallback to any non-archived source or default if exists
-      const fallback = queryOne(db, `SELECT * FROM programas_fuente WHERE archivado = 0 ORDER BY official DESC, created_at DESC LIMIT 1`);
+      const fallback = queryOne(db, `SELECT * FROM programas_fuente WHERE archivado = 0 AND retirado_por_prueba = 0 ORDER BY official DESC, created_at DESC LIMIT 1`);
       if (fallback) {
         db.run(`UPDATE programas_fuente SET activo = 1 WHERE id = ?`, [fallback.id]);
         save();
@@ -139,6 +132,7 @@ class SourceProgramService {
     const db = await getDb();
     const item = queryOne(db, `SELECT * FROM programas_fuente WHERE id = ?`, [id]);
     if (!item) throw new Error(`Programa fuente no encontrado: ${id}`);
+    if (item.retirado_por_prueba) throw new Error('Este paquete de prueba está retirado y no se puede activar.');
     if (item.archivado) throw new Error('No se puede activar un programa fuente archivado. Restáurelo primero.');
 
     db.run(`UPDATE programas_fuente SET activo = 0;`);
@@ -150,6 +144,8 @@ class SourceProgramService {
 
   async rename(id, newName) {
     const db = await getDb();
+    const item=queryOne(db,'SELECT * FROM programas_fuente WHERE id = ?',[id]);
+    if(sourceFlags(db,item).isOfficial)throw new Error('El Programa Marco oficial es de solo lectura y no se puede renombrar.');
     const cleanName = (newName || '').trim();
     if (!cleanName) throw new Error('El nombre del programa fuente no puede estar vacío.');
 
@@ -162,7 +158,9 @@ class SourceProgramService {
   async setArchived(id, archive = true) {
     const db = await getDb();
     const item = queryOne(db, `SELECT * FROM programas_fuente WHERE id = ?`, [id]);
+    if (item?.retirado_por_prueba) throw new Error('Un paquete de prueba retirado no se puede restaurar.');
     if (!item) throw new Error(`Programa fuente no encontrado: ${id}`);
+    if(sourceFlags(db,item).isProtectedOfficial)throw new Error('Solo se puede desactivar un Programa Marco oficial cuando exista una versión oficial posterior.');
 
     const isArchiving = Boolean(archive);
     if (isArchiving && item.activo) {
@@ -171,8 +169,6 @@ class SourceProgramService {
       const alternative = queryOne(db, `SELECT id FROM programas_fuente WHERE id != ? AND archivado = 0 LIMIT 1`, [id]);
       if (alternative) {
         db.run(`UPDATE programas_fuente SET activo = 1 WHERE id = ?`, [alternative.id]);
-      } else {
-        db.run(`UPDATE programas_fuente SET activo = 1, archivado = 0 WHERE id = 'fuente_marco_oficial'`);
       }
     }
 
@@ -190,20 +186,12 @@ class SourceProgramService {
     const db = await getDb();
     const item = queryOne(db, `SELECT * FROM programas_fuente WHERE id = ?`, [id]);
     const linked = this.countLinkedProjects(db, id);
-    const isDefault = item && item.id === 'fuente_marco_oficial';
-    const isOfficial = isDefault ? true : Boolean(item && item.official);
-    let isProtectedOfficial = false;
-    if (isDefault) {
-      const hasOtherOfficial = queryOne(db, "SELECT 1 FROM contenidos_instalados WHERE is_current_official = 1 AND fuente_id != 'fuente_marco_oficial' LIMIT 1");
-      isProtectedOfficial = hasOtherOfficial ? Boolean(item.oficial_actual_protegido) : true;
-    } else {
-      isProtectedOfficial = isOfficial && Boolean(item.oficial_actual_protegido);
-    }
+    const { isOfficial, isProtectedOfficial } = sourceFlags(db, item);
 
     return {
-      canDelete: linked === 0 && !isProtectedOfficial,
+      canDelete: linked === 0 && !isOfficial,
       linkedProjectsCount: linked,
-      isProtected: isProtectedOfficial,
+      isProtected: isOfficial,
       isProtectedOfficial,
       isOfficial
     };
@@ -212,8 +200,8 @@ class SourceProgramService {
   async delete(id) {
     const db = await getDb();
     const check = await this.canDelete(id);
-    if (check.isProtectedOfficial) {
-      throw new Error('El Programa Marco oficial actual está protegido y no puede eliminarse.');
+    if (check.isOfficial) {
+      throw new Error('El Programa Marco oficial es de solo lectura y no puede eliminarse.');
     }
     if (!check.canDelete) {
       throw new Error(`Este programa fuente está siendo utilizado por ${check.linkedProjectsCount} proyecto(s). No se puede eliminar directamente.`);
@@ -235,14 +223,14 @@ class SourceProgramService {
         const currentOfficial = queryOne(
           db,
           `SELECT id FROM programas_fuente
-           WHERE (official = 1 OR id = 'fuente_marco_oficial')
+           WHERE official = 1
              AND oficial_actual_protegido = 1
              AND id != ?
            LIMIT 1`,
           [id]
         );
-        const fallbackId = currentOfficial ? currentOfficial.id : 'fuente_marco_oficial';
-        db.run(`UPDATE programas_fuente SET activo = 1 WHERE id = ?`, [fallbackId]);
+        const alternative = currentOfficial || queryOne(db, 'SELECT id FROM programas_fuente WHERE archivado = 0 ORDER BY created_at LIMIT 1');
+        if (alternative) db.run(`UPDATE programas_fuente SET activo = 1 WHERE id = ?`, [alternative.id]);
       }
       db.run('COMMIT;');
     } catch (err) {
@@ -387,6 +375,7 @@ class SourceProgramService {
     const db = await getDb();
     const source = await this.getById(sourceId);
     if (!source) throw new Error(`Programa fuente no encontrado: ${sourceId}`);
+    if(source.official)throw new Error('Los idiomas del Programa Marco oficial solo se actualizan mediante paquetes verificados.');
     if (source.idiomas?.[targetLang]?.disponible) throw new Error('Esta fuente ya tiene una versión en ese idioma.');
 
     // Validate the whole correspondence before changing any language column.
@@ -483,9 +472,9 @@ class SourceProgramService {
     const proj = queryOne(db, `SELECT fuente_id, mapeo_fuentes_json FROM proyectos WHERE id = ?`, [projectId]);
     if (!proj) throw new Error(`Proyecto no encontrado: ${projectId}`);
 
-    const principalId = proj.fuente_id || 'fuente_marco_oficial';
+    const principalId = proj.fuente_id && queryOne(db, 'SELECT id FROM programas_fuente WHERE id = ?', [proj.fuente_id]) ? proj.fuente_id : null;
     const existingPf = queryOne(db, `SELECT * FROM proyecto_fuentes WHERE proyecto_id = ? AND fuente_id = ?`, [projectId, principalId]);
-    if (!existingPf) {
+    if (principalId && !existingPf) {
       db.run(
         `INSERT OR IGNORE INTO proyecto_fuentes (id, proyecto_id, fuente_id, rol, fecha_anadida) VALUES (?, ?, ?, 'principal', ?)`,
         [`pf_${projectId}_${principalId}`, projectId, principalId, new Date().toISOString()]

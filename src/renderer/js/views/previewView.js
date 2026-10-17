@@ -104,7 +104,7 @@ const PreviewView = {
       num: pageNum++,
       type: 'portada',
       title: isCa ? 'PORTADA' : 'PORTADA',
-      lema: project.lema || 'POLÍTICAS HONESTAS',
+      lema: window.Lema.getLema(project, currentLang) || '',
       municipio: project.municipio || (isCa ? 'MUNICIPI' : 'MUNICIPIO'),
       mandato: project.mandato || '2027–2031',
       partido: project.partido || 'Podemos',
@@ -206,7 +206,7 @@ const PreviewView = {
         type: 'cierre',
         title: cierreTitulo,
         parrafos: cierreParrafos,
-        slogan: project.lema || ''
+        slogan: window.Lema.getLema(project, currentLang) || ''
       });
     }
 

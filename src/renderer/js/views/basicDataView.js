@@ -88,14 +88,19 @@ const BasicDataView = {
             </div>
           </div>
 
-          <div class="form-group" style="margin-top: 10px;">
-            <label class="form-label" for="input-lema">${window.i18n.t('basic.field_lema')} <span class="optional">(${isCa ? 'Opcional · Màx 60 caràcters' : 'Opcional · Máx 60 caracteres'})</span></label>
-            <input type="text" class="input" id="input-lema" maxlength="60" value="${escapeHtml(project.lema || '')}" placeholder="${isCa ? 'Ex. La força de transformar el nostre municipi' : 'Ej. La fuerza de transformar nuestro municipio'}">
-            <div style="display: flex; justify-content: space-between; margin-top: 4px;">
-              <span class="form-hint">${window.i18n.t('basic.field_lema_hint')}</span>
-              <span class="form-hint" id="lema-counter">${(project.lema || '').length}/60</span>
+          ${['es', 'ca'].map(lemaLang => `
+            <div class="form-group" style="margin-top: 10px;">
+              <label class="form-label" for="input-lema-${lemaLang}">${lemaLang === 'es' ? window.i18n.t('lema.field_es') : window.i18n.t('lema.field_ca')}</label>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <input type="text" class="input" id="input-lema-${lemaLang}" maxlength="60" value="${escapeHtml(window.Lema.getLema(project, lemaLang) || '')}" placeholder="${lemaLang === 'es' ? window.i18n.t('lema.placeholder_es') : window.i18n.t('lema.placeholder_ca')}">
+                <button type="button" class="btn small" id="btn-translate-lema-${lemaLang}">${window.i18n.t('lema.translate')}</button>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-top: 4px;">
+                <span class="form-hint">${window.i18n.t('basic.field_lema_hint')}</span>
+                <span class="form-hint" id="lema-counter-${lemaLang}">${(window.Lema.getLema(project, lemaLang) || '').length}/60</span>
+              </div>
             </div>
-          </div>
+          `).join('')}
         </div>
 
         <!-- Columna Derecha: Opcionales, Servicios, Logo -->
@@ -357,12 +362,29 @@ const BasicDataView = {
     }
 
     // Lema character counter
-    const lemaInput = container.querySelector('#input-lema');
-    const lemaCounter = container.querySelector('#lema-counter');
-    lemaInput.addEventListener('input', () => {
-      lemaCounter.textContent = `${lemaInput.value.length}/60`;
-      this.triggerAutosave(project);
-    });
+    for (const lemaLang of ['es', 'ca']) {
+      const input = container.querySelector('#input-lema-' + lemaLang);
+      const counter = container.querySelector('#lema-counter-' + lemaLang);
+      const button = container.querySelector('#btn-translate-lema-' + lemaLang);
+      input.addEventListener('input', () => {
+        counter.textContent = `${input.value.length}/60`;
+        this.triggerAutosave(project);
+      });
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          await window.LemaUi.translate(project, lemaLang, {
+            read: lang => container.querySelector('#input-lema-' + lang).value,
+            write: async (lang, value) => {
+              container.querySelector('#input-lema-' + lang).value = value;
+              container.querySelector('#lema-counter-' + lang).textContent = `${value.length}/60`;
+              await this.saveFormData(project);
+            }
+          });
+        } catch (err) { alert(err.message); }
+        finally { button.disabled = false; }
+      });
+    }
 
     // Fecha electoral Sunday validation
     const fechaInput = container.querySelector('#input-fecha-electoral');
@@ -663,7 +685,8 @@ const BasicDataView = {
           project.organizacion = `${project.partido || 'Podemos'} ${m.nombre}`.trim();
         }
         if (ficha.mandato) project.mandato = ficha.mandato;
-        project.lema = ficha.lema || null;
+        project.lema_es = window.Lema.getLema(ficha, 'es');
+        project.lema_ca = window.Lema.getLema(ficha, 'ca');
         project.fecha_electoral = ficha.fecha_electoral || null;
         project.presupuesto_municipal = (ficha.presupuesto_municipal !== null && ficha.presupuesto_municipal !== undefined) ? ficha.presupuesto_municipal : null;
         project.presupuesto_inversiones = (ficha.presupuesto_inversiones !== null && ficha.presupuesto_inversiones !== undefined) ? ficha.presupuesto_inversiones : null;
@@ -691,7 +714,8 @@ const BasicDataView = {
         organizacion: project.organizacion,
         organizacion_modificada: project.organizacion_modificada ? 1 : 0,
         mandato: project.mandato,
-        lema: project.lema,
+        lema_es: window.Lema.getLema(project, 'es'),
+        lema_ca: window.Lema.getLema(project, 'ca'),
         fecha_electoral: project.fecha_electoral,
         presupuesto_municipal: project.presupuesto_municipal,
         presupuesto_inversiones: project.presupuesto_inversiones,
@@ -736,7 +760,8 @@ const BasicDataView = {
       project.organizacion = orgInput.value.trim();
     }
 
-    project.lema = null;
+    project.lema_es = null;
+    project.lema_ca = null;
     project.fecha_electoral = null;
     project.presupuesto_municipal = null;
     project.presupuesto_inversiones = null;
@@ -757,7 +782,8 @@ const BasicDataView = {
       poblacion_modificada: 0,
       organizacion: project.organizacion,
       organizacion_modificada: project.organizacion_modificada ? 1 : 0,
-      lema: null,
+      lema_es: null,
+      lema_ca: null,
       fecha_electoral: null,
       presupuesto_municipal: null,
       presupuesto_inversiones: null,
@@ -810,7 +836,8 @@ const BasicDataView = {
       organizacion: root.querySelector('#input-organizacion')?.value.trim() || '',
       idioma_principal: root.querySelector('#select-idioma-principal')?.value || 'es',
       idioma_secundario: (root.querySelector('#select-idioma-principal')?.value === 'es') ? 'ca' : 'es',
-      lema: root.querySelector('#input-lema')?.value.trim() || null,
+      lema_es: root.querySelector('#input-lema-es')?.value.trim() || null,
+      lema_ca: root.querySelector('#input-lema-ca')?.value.trim() || null,
       habitantes: habVal !== undefined && habVal !== '' && habVal !== null ? parseInt(habVal, 10) : null,
       fecha_electoral: validFecha,
       presupuesto_municipal: root.querySelector('#input-presupuesto-mun')?.value || null,
@@ -843,7 +870,8 @@ const BasicDataView = {
         partido: data.partido,
         organizacion: data.organizacion,
         mandato: data.mandato,
-        lema: data.lema,
+        lema_es: data.lema_es,
+        lema_ca: data.lema_ca,
         fecha_electoral: data.fecha_electoral,
         presupuesto_municipal: data.presupuesto_municipal,
         presupuesto_inversiones: data.presupuesto_inversiones,

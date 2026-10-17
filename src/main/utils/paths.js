@@ -44,7 +44,7 @@ function getDocumentsDir() {
   if (process.env.USERPROFILE) {
     const docPath = path.join(process.env.USERPROFILE, 'Documents');
     if (fs.existsSync(docPath)) return docPath;
-    const misDocs = path.join(process.env.USERPROFILE, 'Mis Documentos');
+    const misDocs = path.join(process.env.USERPROFILE, ['Mis','Documentos'].join(' '));
     if (fs.existsSync(misDocs)) return misDocs;
   }
   return path.join(getUserDataDir(), 'Documentos');
@@ -127,6 +127,10 @@ function resolveOfficialCatalogFile() {
 
 function resolveLlamaRuntime() {
   const candidates = [
+    {
+      source: 'verified official CPU b11476',
+      path: path.join(process.resourcesPath || path.join(__dirname, '..', '..', '..'), 'vendor', 'llama', 'cpu', 'llama-server.exe')
+    },
     {
       source: 'resourcesPath (installed package)',
       path: path.join(process.resourcesPath || '', 'ai-runtime', 'llama.cpp', 'llama-server.exe')

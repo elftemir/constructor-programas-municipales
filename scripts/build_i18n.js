@@ -110,6 +110,7 @@ const I18N = {
       document.documentElement.lang = lang;
     }
     this.updateStaticElements();
+    if (typeof window !== 'undefined') window.GenerationUi?.refresh();
   },
 
   /**
@@ -143,9 +144,7 @@ const I18N = {
     }
 
     let text = String(val);
-    for (const [k, v] of Object.entries(params)) {
-      text = text.replace(new RegExp(\`\\\\{+\${k}\\\\}}+\`, 'g'), v);
-    }
+      text = text.replace(/\\{\\{?([A-Za-z0-9_]+)\\}?\\}/g, (_match, name) => Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : '');
     return text;
   },
 
